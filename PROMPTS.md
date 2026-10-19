@@ -77,6 +77,19 @@ Gemeinsame Schnittstelle mit dem Simulator, damit main.py beide Quellen gleich b
 ```
 **Prüfen:** Mit Platine testen (COM-Port unter Windows!). Was passiert beim Abziehen des USB-Kabels?
 
+## Folge-Prompt 4b:
+
+Review von serial_reader.py:
+1. Die StopIteration-Warnings kamen von erschöpften Mock-side_effects in den Tests, nicht vom Produktivcode.
+   Behebe das in den Tests (Mocks so aufsetzen, dass sie nicht erschöpft werden, oder stop() vorher auslösen).
+2. Das neue "except Exception: break" beendet den Reader-Thread dauerhaft. Da der Callback innerhalb dieses
+   try aufgerufen wird, würde z. B. ein späterer DB-Fehler im Callback das Einlesen still stoppen.
+   Ändere es so: Exceptions aus dem Callback pro Reading abfangen und loggen, Reader läuft weiter.
+   Unerwartete Exceptions beim Verbinden/Lesen loggen und wie SerialException behandeln (Reconnect), nicht break.
+3. SimulatorReader soll ebenfalls von DataSource erben.
+Ergänze einen Test: Callback wirft eine Exception, nachfolgende Readings werden trotzdem zugestellt.
+Führe alle Tests aus.
+
 ## Prompt 5 – Speicherung in SQLite
 ```
 Implementiere app/db.py: Tabelle readings (id, ts, source, moisture_ch0..ch3 als Prozent,

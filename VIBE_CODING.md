@@ -22,7 +22,8 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | 1 | Projekt-Setup | Struktur exakt nach AGENTS.md, pip install ok, ~1,5 min | PowerShell-Hinweis ergänzt (vorher bash-Fehler) | 5 min |
 | 2 | Parser + Datenmodell | | | |
 | 3 | Simulator | | | |
-| 4 | UART-Reader | | | |
+| 4 | UART-Reader | Reconnect, Mocks, 76 Tests; Agent bemerkt Warnings selbst | Fix im falschen Layer (except: break) | … |
+| 4b | Folge-Prompt Reader-Robustheit | Ursache in Tests behoben, Callback isoliert, 77/77 | – | … |
 | 5 | SQLite | | | |
 | 6 | REST-API | | | |
 | 7 | Dashboard | | | |
@@ -42,7 +43,11 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | Problem | Art (Halluzination / Bug / Security / Wartbarkeit) | Wie entdeckt | Lösung |
 |---------|----------------------------------------------------|--------------|--------|
 parse_line('[1,2]') → AttributeError, obwohl AGENTS.md „niemals abstürzen” fordert; 17/17 Tests trotzdem grün | Bug / Robustheit | Manueller Code-Review + Gegenprobe im Terminal | Folge-Prompt 2b
+
 Agent ändert bestehenden Test, damit neue Implementierung grün wird; Garbage-Arrays werden zu leeren Readings|Bug / Test an Code angepasst | Diff-Review des Testfiles | Folge-Prompt 3c
+
+Agent „behebt” Test-Artefakt (Mock-StopIteration) im Produktivcode mit except Exception: break → Reader stirbt bei jedem Callback-Fehler still | Bug / Fehlerursache falsch diagnostiziert | Code-Review | Folge-Prompt 4b
+
 
 Догадка вместо проверки. Про AGENTS.md агент написал «Vermutlich ähnliche Anweisungen», то есть не открыл файл и угадал. На деле файл идентичен CLAUDE.md. Мелкий, но наглядный пример того, что LLM уверенно додумывает вместо того, чтобы прочитать. Это для раздела 7, тип «Halluzination / Annahme».
 
