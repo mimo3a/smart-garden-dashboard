@@ -74,9 +74,13 @@ def parse_line(line: str) -> Optional[Reading]:
         logger.warning("Invalid JSON line: %r", line[:120])
         return None
 
-    # Fix 1: JSON must be an object, not an array, number, null, etc.
-    if not isinstance(data, dict):
-        logger.warning("JSON is not an object (got %s): %r", type(data).__name__, line[:120])
+    # Legacy format: bare ADC array sent by older firmware versions.
+    # Normalise to standard object so the rest of the function is unchanged.
+    if isinstance(data, list):
+        logger.debug("Legacy format (bare ADC array) detected, normalising")
+        data = {"adc": data}
+    elif not isinstance(data, dict):
+        logger.warning("JSON is not an object or array (got %s): %r", type(data).__name__, line[:120])
         return None
 
     calibration = _load_calibration()
@@ -137,12 +141,20 @@ def parse_line(line: str) -> Optional[Reading]:
             logger.warning("Skipping malformed battery data: %s", exc)
 
     # Fix 3b: wrong scalar types must not raise ValidationError.
+    air_temp_c = _safe_float(data.get("air_temp_c"))
+    soil_temp_c = _safe_float(data.get("soil_temp_c"))
+
+    # Discard lines that carry no usable data at all.
+    if not adc_channels and air_temp_c is None and soil_temp_c is None and battery is None:
+        logger.warning("No usable data in line, discarding: %r", line[:120])
+        return None
+
     try:
         return Reading(
             timestamp=datetime.now(tz=timezone.utc),
             adc=adc_channels,
-            air_temp_c=_safe_float(data.get("air_temp_c")),
-            soil_temp_c=_safe_float(data.get("soil_temp_c")),
+            air_temp_c=air_temp_c,
+            soil_temp_c=soil_temp_c,
             battery=battery,
         )
     except Exception as exc:

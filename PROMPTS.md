@@ -52,6 +52,21 @@ Der Simulator liefert Strings, damit er denselben Weg durch den Parser nimmt wie
 ```
 **Prüfen:** Kommen die Daten wirklich durch `parse_line`? Sind die Werte plausibel?
 
+## Prompt 3b – Folge-Prompt (Neu Format)
+
+Die aktuelle Firmware sendet noch das alte Format: ein JSON-Array [{"ch":0,"raw":15234,"status":"ok"}, ...]
+ohne Temperaturen und Batterie. parse_line soll dieses Legacy-Format zusätzlich akzeptieren
+(Temperaturen und Batterie dann None). Ergänze Tests dafür und aktualisiere das Datenformat in AGENTS.md
+und CLAUDE.md.
+
+## Folge-Prompt 3c
+
+Du hast test_json_array so angepasst, dass "[1, 2, 3]" jetzt ein leeres Reading liefert – das schwächt
+den Robustheits-Fix ab. Regel: parse_line gibt None zurück, wenn nach dem Parsen keinerlei Messwerte
+übrig sind (keine gültigen Kanäle, keine Temperaturen, keine Batterie). Das gilt für [1,2,3], [],
+{"adc": null} und {}. Stelle den ursprünglichen Test für [1,2,3] (Ergebnis None) wieder her, ergänze
+Tests für die anderen Fälle und führe danach ALLE Tests aus (pytest -q), nicht nur test_parser.py.
+
 ## Prompt 4 – UART-Reader
 ```
 Implementiere app/serial_reader.py: ein Hintergrund-Thread, der mit pyserial vom angegebenen Port liest

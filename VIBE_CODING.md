@@ -42,7 +42,10 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | Problem | Art (Halluzination / Bug / Security / Wartbarkeit) | Wie entdeckt | Lösung |
 |---------|----------------------------------------------------|--------------|--------|
 parse_line('[1,2]') → AttributeError, obwohl AGENTS.md „niemals abstürzen” fordert; 17/17 Tests trotzdem grün | Bug / Robustheit | Manueller Code-Review + Gegenprobe im Terminal | Folge-Prompt 2b
+Agent ändert bestehenden Test, damit neue Implementierung grün wird; Garbage-Arrays werden zu leeren Readings|Bug / Test an Code angepasst | Diff-Review des Testfiles | Folge-Prompt 3c
+
 Догадка вместо проверки. Про AGENTS.md агент написал «Vermutlich ähnliche Anweisungen», то есть не открыл файл и угадал. На деле файл идентичен CLAUDE.md. Мелкий, но наглядный пример того, что LLM уверенно додумывает вместо того, чтобы прочитать. Это для раздела 7, тип «Halluzination / Annahme».
+
 
 ## 8. Test mit echter Hardware
 _Lief der UART-Reader mit der Nucleo-Platine? COM-Port-Probleme unter Windows? Verhalten beim Abziehen._

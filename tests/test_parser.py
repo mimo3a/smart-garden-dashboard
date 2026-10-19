@@ -128,9 +128,10 @@ class TestRawOutsideCalibration:
 
 
 class TestNonObjectJson:
-    """Fix 1: valid JSON that is not an object must return None, not AttributeError."""
+    """Scalars and other non-array/non-object JSON values must return None."""
 
-    def test_json_array(self):
+    def test_json_array_of_integers_returns_none(self):
+        # All entries discarded as non-dict, nothing left → None.
         assert parse_line("[1, 2, 3]") is None
 
     def test_json_integer(self):
@@ -153,10 +154,8 @@ class TestAdcNullOrNonDict:
         assert r.adc == []
 
     def test_adc_not_a_list(self):
-        line = json.dumps({"adc": "bad"})
-        r = parse_line(line)
-        assert r is not None
-        assert r.adc == []
+        # No channels parsed, no other data → None.
+        assert parse_line(json.dumps({"adc": "bad"})) is None
 
     def test_adc_channel_is_integer(self):
         line = json.dumps({"adc": [42, {"ch": 1, "raw": 15000, "status": "ok"}]})
@@ -202,16 +201,14 @@ class TestMissingChKey:
     """Fix 4: channel entries without 'ch' must be discarded, not mapped to ch=0."""
 
     def test_channel_without_ch_is_discarded(self):
-        line = json.dumps({"adc": [{"raw": 15000, "status": "ok"}]})
-        r = parse_line(line)
-        assert r is not None
-        assert r.adc == []
+        # Only entry has no "ch" → discarded → nothing left → None.
+        assert parse_line(json.dumps({"adc": [{"raw": 15000, "status": "ok"}]})) is None
 
     def test_valid_channel_kept_alongside_discarded(self):
         line = json.dumps(
             {
                 "adc": [
-                    {"raw": 15000, "status": "ok"},       # no "ch" → discard
+                    {"raw": 15000, "status": "ok"},           # no "ch" → discard
                     {"ch": 2, "raw": 15000, "status": "ok"},  # valid → keep
                 ]
             }
@@ -220,3 +217,88 @@ class TestMissingChKey:
         assert r is not None
         assert len(r.adc) == 1
         assert r.adc[0].ch == 2
+
+
+# ---------------------------------------------------------------------------
+# Legacy format
+# ---------------------------------------------------------------------------
+
+LEGACY_LINE = json.dumps(
+    [
+        {"ch": 0, "raw": 15234, "status": "ok"},
+        {"ch": 1, "raw": 14980, "status": "ok"},
+        {"ch": 2, "raw": 0, "status": "err"},
+        {"ch": 3, "raw": 16012, "status": "ok"},
+    ]
+)
+
+
+class TestLegacyFormat:
+    """Bare JSON array (old firmware) must be accepted like the current object format."""
+
+    def test_returns_reading(self):
+        assert parse_line(LEGACY_LINE) is not None
+
+    def test_four_channels_parsed(self):
+        r = parse_line(LEGACY_LINE)
+        assert len(r.adc) == 4
+
+    def test_temps_and_battery_are_none(self):
+        r = parse_line(LEGACY_LINE)
+        assert r.air_temp_c is None
+        assert r.soil_temp_c is None
+        assert r.battery is None
+
+    def test_moisture_computed_for_ok_channels(self):
+        expected = (DRY - 15234) / (DRY - WET) * 100
+        r = parse_line(LEGACY_LINE)
+        assert r.adc[0].moisture_pct == pytest.approx(expected)
+
+    def test_err_channel_has_no_moisture(self):
+        r = parse_line(LEGACY_LINE)
+        assert r.adc[2].status == "err"
+        assert r.adc[2].moisture_pct is None
+
+    def test_empty_array(self):
+        # No channels, no temps, no battery → None.
+        assert parse_line("[]") is None
+
+    def test_timestamp_present(self):
+        r = parse_line(LEGACY_LINE)
+        assert r.timestamp is not None
+
+
+# ---------------------------------------------------------------------------
+# Empty-reading guard
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyReading:
+    """Lines that yield no usable data after parsing must return None."""
+
+    def test_integer_array(self):
+        # All entries non-dict → discarded → no channels, no temps, no battery.
+        assert parse_line("[1, 2, 3]") is None
+
+    def test_empty_array(self):
+        assert parse_line("[]") is None
+
+    def test_adc_null_only(self):
+        # {"adc": null} with no other fields.
+        assert parse_line(json.dumps({"adc": None})) is None
+
+    def test_empty_object(self):
+        assert parse_line("{}") is None
+
+    def test_adc_null_with_temp_is_kept(self):
+        # adc null but temperature present → still useful → not None.
+        r = parse_line(json.dumps({"adc": None, "air_temp_c": 20.0}))
+        assert r is not None
+        assert r.adc == []
+        assert r.air_temp_c == pytest.approx(20.0)
+
+    def test_battery_only_is_kept(self):
+        # No adc, no temps, but battery present → useful → not None.
+        r = parse_line(json.dumps({"battery": {"voltage": 3.8, "percent": 65}}))
+        assert r is not None
+        assert r.battery is not None

@@ -12,6 +12,8 @@ Ohne Platine läuft die App im Simulator-Modus (`--simulate`), damit sie überal
 - Läuft unter Windows (COM-Ports, z. B. `COM5`) und Linux (`/dev/ttyACM0`)
 
 ## Datenformat (UART, 115200 Baud, eine JSON-Zeile pro Messung, `\n`-terminiert)
+
+### Aktuelles Format
 ```json
 {"adc":[{"ch":0,"raw":15234,"status":"ok"},{"ch":1,"raw":14980,"status":"ok"},{"ch":2,"raw":0,"status":"err"},{"ch":3,"raw":16012,"status":"ok"}],
  "air_temp_c":22.4,"soil_temp_c":18.1,"battery":{"voltage":3.91,"percent":76}}
@@ -23,6 +25,14 @@ Ohne Platine läuft die App im Simulator-Modus (`--simulate`), damit sie überal
 - Fehlende Felder oder `status: "err"` sind erlaubt und dürfen die App nicht abstürzen lassen.
 - Der Zeitstempel wird beim Empfang im Backend gesetzt (UTC, ISO 8601).
 - Feuchte in %: lineare Umrechnung aus `raw` mit Kalibrierwerten `dry_raw` / `wet_raw` pro Kanal aus `config.json`.
+
+### Legacy-Format (ältere Firmware)
+Ältere Firmware-Versionen senden nur ein JSON-Array der ADC-Kanäle, ohne Temperaturen oder Batterie:
+```json
+[{"ch":0,"raw":15234,"status":"ok"},{"ch":1,"raw":14980,"status":"ok"},{"ch":2,"raw":0,"status":"err"},{"ch":3,"raw":16012,"status":"ok"}]
+```
+`parse_line` erkennt beide Formate automatisch. Bei Legacy-Zeilen sind `air_temp_c`, `soil_temp_c`
+und `battery` im `Reading`-Objekt `None`.
 
 ## Projektstruktur
 ```
