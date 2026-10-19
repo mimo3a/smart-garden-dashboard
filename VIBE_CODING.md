@@ -18,8 +18,8 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 
 ## 4. Prompt-Log
 | # | Prompt (kurz) | Ergebnis | Nacharbeit / Folge-Prompt | Dauer |
-|---|---------------|----------|---------------------------|-------|
-| 1 | Projekt-Setup | | | |
+|---|---------------|------------|---------------------------|-------|
+| 1 | Projekt-Setup | Struktur exakt nach AGENTS.md, pip install ok, ~1,5 min | PowerShell-Hinweis ergänzt (vorher bash-Fehler) | 5 min |
 | 2 | Parser + Datenmodell | | | |
 | 3 | Simulator | | | |
 | 4 | UART-Reader | | | |
@@ -41,6 +41,7 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 ## 7. Gefundene Probleme der KI
 | Problem | Art (Halluzination / Bug / Security / Wartbarkeit) | Wie entdeckt | Lösung |
 |---------|----------------------------------------------------|--------------|--------|
+parse_line('[1,2]') → AttributeError, obwohl AGENTS.md „niemals abstürzen” fordert; 17/17 Tests trotzdem grün | Bug / Robustheit | Manueller Code-Review + Gegenprobe im Terminal | Folge-Prompt 2b
 Догадка вместо проверки. Про AGENTS.md агент написал «Vermutlich ähnliche Anweisungen», то есть не открыл файл и угадал. На деле файл идентичен CLAUDE.md. Мелкий, но наглядный пример того, что LLM уверенно додумывает вместо того, чтобы прочитать. Это для раздела 7, тип «Halluzination / Annahme».
 
 ## 8. Test mit echter Hardware

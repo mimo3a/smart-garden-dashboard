@@ -30,6 +30,17 @@ der Kalibrierung. Führe die Tests aus.
 ```
 **Prüfen:** Stimmt die Prozent-Umrechnung (trocken = hoher Rohwert!)? Tests decken Randfälle wirklich ab?
 
+## Prompt 2b – Folge-Prompt (Robustheit Parser)
+
+Review von parser.py: parse_line verletzt die Regel "niemals abstürzen" aus AGENTS.md.
+1. Gültiges JSON, das kein Objekt ist ([1,2], 123, null), führt zu AttributeError.
+2. "adc": null oder ein Kanal-Eintrag, der kein Objekt ist, führt zu einem Absturz.
+3. Falsche Typen (z. B. "air_temp_c": "abc", "raw": "x") werfen eine nicht abgefangene ValidationError.
+4. Ein Kanal ohne "ch" wird stillschweigend zu Kanal 0 – solche Einträge stattdessen verwerfen und loggen.
+Behebe das so, dass parse_line in diesen Fällen None zurückgibt bzw. nur das fehlerhafte Feld/den Kanal
+verwirft. Ergänze für jeden Fall einen Test und führe alle Tests aus.
+
+
 ## Prompt 3 – Simulator
 ```
 Implementiere app/simulator.py: ein Generator, der jede Sekunde eine JSON-Zeile im Format aus AGENTS.md

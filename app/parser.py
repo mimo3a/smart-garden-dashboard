@@ -1,1 +1,150 @@
 """Parse and validate a single JSON line received via UART into a Reading."""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+from app.models import AdcChannel, BatteryReading, Reading
+
+logger = logging.getLogger(__name__)
+
+_CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+_calibration_cache: Optional[dict[int, dict]] = None
+
+
+def _load_calibration() -> dict[int, dict]:
+    """Return calibration dict keyed by channel index, loaded once from config.json."""
+    global _calibration_cache
+    if _calibration_cache is not None:
+        return _calibration_cache
+    try:
+        with _CONFIG_PATH.open(encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        _calibration_cache = {
+            entry["channel"]: entry for entry in cfg.get("calibration", [])
+        }
+    except Exception as exc:
+        logger.warning("Could not load calibration from %s: %s", _CONFIG_PATH, exc)
+        _calibration_cache = {}
+    return _calibration_cache
+
+
+def _moisture_pct(raw: int, dry_raw: int, wet_raw: int) -> float:
+    """Convert raw ADC value to soil moisture %, clamped to 0–100.
+
+    dry_raw maps to 0 %, wet_raw maps to 100 %.
+    """
+    if dry_raw == wet_raw:
+        return 0.0
+    pct = (dry_raw - raw) / (dry_raw - wet_raw) * 100.0
+    return max(0.0, min(100.0, pct))
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    """Return float(value), or None if conversion fails."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        logger.warning("Cannot convert %r to float, using None", value)
+        return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    """Return int(value), or None if conversion fails."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Cannot convert %r to int, using None", value)
+        return None
+
+
+def parse_line(line: str) -> Optional[Reading]:
+    """Parse a single UART JSON line into a Reading; return None on invalid input."""
+    try:
+        data = json.loads(line)
+    except json.JSONDecodeError:
+        logger.warning("Invalid JSON line: %r", line[:120])
+        return None
+
+    # Fix 1: JSON must be an object, not an array, number, null, etc.
+    if not isinstance(data, dict):
+        logger.warning("JSON is not an object (got %s): %r", type(data).__name__, line[:120])
+        return None
+
+    calibration = _load_calibration()
+
+    adc_channels: list[AdcChannel] = []
+    raw_adc = data.get("adc")
+
+    # Fix 2: "adc" may be null or a non-list value.
+    if raw_adc is not None:
+        if not isinstance(raw_adc, list):
+            logger.warning("'adc' is not a list (%r), ignoring", type(raw_adc).__name__)
+        else:
+            for ch_data in raw_adc:
+                # Fix 2b: each channel entry must be a dict.
+                if not isinstance(ch_data, dict):
+                    logger.warning("ADC entry is not an object (%r), discarding", ch_data)
+                    continue
+
+                ch_idx = _safe_int(ch_data.get("ch"))
+
+                # Fix 4: discard channels without a valid "ch" key.
+                if ch_idx is None:
+                    logger.warning("ADC entry missing 'ch', discarding: %r", ch_data)
+                    continue
+
+                # Fix 3a: raw may be a wrong type.
+                raw = _safe_int(ch_data.get("raw"))
+                status = ch_data.get("status", "err")
+                if not isinstance(status, str):
+                    status = "err"
+
+                moisture: Optional[float] = None
+                if status == "ok" and raw is not None and ch_idx in calibration:
+                    cal = calibration[ch_idx]
+                    moisture = _moisture_pct(raw, cal["dry_raw"], cal["wet_raw"])
+
+                try:
+                    adc_channels.append(
+                        AdcChannel(
+                            ch=ch_idx,
+                            raw=raw,
+                            status=status,
+                            moisture_pct=moisture,
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Skipping invalid ADC channel %r: %s", ch_data, exc)
+
+    battery: Optional[BatteryReading] = None
+    batt_data = data.get("battery")
+    if batt_data is not None:
+        try:
+            battery = BatteryReading(
+                voltage=batt_data["voltage"],
+                percent=batt_data["percent"],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Skipping malformed battery data: %s", exc)
+
+    # Fix 3b: wrong scalar types must not raise ValidationError.
+    try:
+        return Reading(
+            timestamp=datetime.now(tz=timezone.utc),
+            adc=adc_channels,
+            air_temp_c=_safe_float(data.get("air_temp_c")),
+            soil_temp_c=_safe_float(data.get("soil_temp_c")),
+            battery=battery,
+        )
+    except Exception as exc:
+        logger.warning("Could not construct Reading: %s", exc)
+        return None
