@@ -8,118 +8,301 @@ import pytest
 
 from app.parser import _moisture_pct, parse_line
 
-# Exact example from AGENTS.md
-VALID_LINE = json.dumps(
+# Calibration constants matching config.json (all 16 sensors use these values)
+DRY = 26000
+WET = 12000
+
+# ---------------------------------------------------------------------------
+# Test lines
+# ---------------------------------------------------------------------------
+
+# Exact line captured from the real development board (8 channels, dev 0+1,
+# no temperatures or battery because the firmware is still incomplete).
+ACTUAL_LINE = (
+    '{"channels":['
+    '{"dev":0,"ch":0,"status":0,"raw":4781},'
+    '{"dev":0,"ch":1,"status":0,"raw":4755},'
+    '{"dev":0,"ch":2,"status":0,"raw":4728},'
+    '{"dev":0,"ch":3,"status":0,"raw":4772},'
+    '{"dev":1,"ch":0,"status":0,"raw":25351},'
+    '{"dev":1,"ch":1,"status":0,"raw":24649},'
+    '{"dev":1,"ch":2,"status":0,"raw":23800},'
+    '{"dev":1,"ch":3,"status":0,"raw":23156}'
+    ']}'
+)
+
+# Synthetic full line: all 16 channels, temperatures, battery, one err channel.
+FULL_LINE = json.dumps(
     {
-        "adc": [
-            {"ch": 0, "raw": 15234, "status": "ok"},
-            {"ch": 1, "raw": 14980, "status": "ok"},
-            {"ch": 2, "raw": 0, "status": "err"},
-            {"ch": 3, "raw": 16012, "status": "ok"},
-        ],
+        "channels": (
+            # 15 ok channels with raw=15000
+            [{"dev": d, "ch": c, "status": 0, "raw": 15000}
+             for d in range(4) for c in range(4)
+             if not (d == 3 and c == 3)]
+            # one err channel (dev=3, ch=3)
+            + [{"dev": 3, "ch": 3, "status": 1, "raw": 0}]
+        ),
         "air_temp_c": 22.4,
         "soil_temp_c": 18.1,
         "battery": {"voltage": 3.91, "percent": 76},
     }
 )
 
-# Calibration constants matching config.json
-DRY = 26000
-WET = 12000
 
+# ---------------------------------------------------------------------------
+# Actual hardware line (8 channels, no temps/battery)
+# ---------------------------------------------------------------------------
 
-class TestValidLine:
+class TestActualHardwareLine:
+    """Parse the exact line emitted by the current development board."""
+
     def test_returns_reading(self):
-        assert parse_line(VALID_LINE) is not None
+        assert parse_line(ACTUAL_LINE) is not None
+
+    def test_eight_channels(self):
+        r = parse_line(ACTUAL_LINE)
+        assert len(r.channels) == 8
+
+    def test_no_temps_or_battery(self):
+        r = parse_line(ACTUAL_LINE)
+        assert r.air_temp_c is None
+        assert r.soil_temp_c is None
+        assert r.battery is None
+
+    def test_all_channels_ok(self):
+        r = parse_line(ACTUAL_LINE)
+        assert all(ch.status == "ok" for ch in r.channels)
+
+    def test_dev0_raw_below_wet_raw_clamped_to_100(self):
+        # dev=0 raw values (~4700) are far below wet_raw=12000 → 100 %
+        r = parse_line(ACTUAL_LINE)
+        dev0 = [ch for ch in r.channels if ch.dev == 0]
+        for ch in dev0:
+            assert ch.moisture_pct == pytest.approx(100.0)
+
+    def test_dev1_moisture_computed(self):
+        # dev=1, ch=0, raw=25351 → (26000-25351)/(26000-12000)*100 ≈ 4.6 %
+        r = parse_line(ACTUAL_LINE)
+        ch = next(c for c in r.channels if c.dev == 1 and c.ch == 0)
+        expected = (DRY - 25351) / (DRY - WET) * 100
+        assert ch.moisture_pct == pytest.approx(expected)
+
+    def test_channel_ids_correct(self):
+        r = parse_line(ACTUAL_LINE)
+        ids = {(ch.dev, ch.ch) for ch in r.channels}
+        assert ids == {(0, 0), (0, 1), (0, 2), (0, 3),
+                       (1, 0), (1, 1), (1, 2), (1, 3)}
+
+    def test_timestamp_present(self):
+        assert parse_line(ACTUAL_LINE).timestamp is not None
+
+
+# ---------------------------------------------------------------------------
+# Full 16-channel line with temperatures and battery
+# ---------------------------------------------------------------------------
+
+class TestFullLine:
+    def test_returns_reading(self):
+        assert parse_line(FULL_LINE) is not None
+
+    def test_sixteen_channels(self):
+        assert len(parse_line(FULL_LINE).channels) == 16
 
     def test_scalar_fields(self):
-        r = parse_line(VALID_LINE)
+        r = parse_line(FULL_LINE)
         assert r.air_temp_c == pytest.approx(22.4)
         assert r.soil_temp_c == pytest.approx(18.1)
 
     def test_battery(self):
-        r = parse_line(VALID_LINE)
+        r = parse_line(FULL_LINE)
         assert r.battery is not None
         assert r.battery.voltage == pytest.approx(3.91)
         assert r.battery.percent == pytest.approx(76)
 
-    def test_adc_channel_count(self):
-        r = parse_line(VALID_LINE)
-        assert len(r.adc) == 4
+    def test_ok_channel_moisture(self):
+        # raw=15000 → (26000-15000)/(26000-12000)*100 ≈ 78.57 %
+        expected = (DRY - 15000) / (DRY - WET) * 100
+        r = parse_line(FULL_LINE)
+        ok_channels = [ch for ch in r.channels if ch.status == "ok"]
+        for ch in ok_channels:
+            assert ch.moisture_pct == pytest.approx(expected)
 
-    def test_moisture_ch0(self):
-        # (26000 - 15234) / (26000 - 12000) * 100
-        expected = (DRY - 15234) / (DRY - WET) * 100
-        r = parse_line(VALID_LINE)
-        assert r.adc[0].moisture_pct == pytest.approx(expected)
+    def test_err_channel_no_moisture(self):
+        r = parse_line(FULL_LINE)
+        err_ch = next(c for c in r.channels if c.status == "err")
+        assert err_ch.dev == 3 and err_ch.ch == 3
+        assert err_ch.moisture_pct is None
 
-    def test_moisture_ch1(self):
-        expected = (DRY - 14980) / (DRY - WET) * 100
-        r = parse_line(VALID_LINE)
-        assert r.adc[1].moisture_pct == pytest.approx(expected)
 
-    def test_timestamp_present(self):
-        r = parse_line(VALID_LINE)
-        assert r.timestamp is not None
-
+# ---------------------------------------------------------------------------
+# Broken / non-JSON input
+# ---------------------------------------------------------------------------
 
 class TestBrokenJson:
-    def test_garbage_input(self):
+    def test_garbage_returns_none(self):
         assert parse_line("not valid json {{{") is None
 
-    def test_empty_string(self):
+    def test_empty_string_returns_none(self):
         assert parse_line("") is None
 
-    def test_truncated_json(self):
-        assert parse_line('{"adc":') is None
+    def test_truncated_json_returns_none(self):
+        assert parse_line('{"channels":') is None
+
+    def test_boot_message_returns_none(self):
+        assert parse_line("USART1 PA9 OK") is None
+
+    def test_other_boot_message_returns_none(self):
+        assert parse_line("System clock configured") is None
 
 
-class TestMissingBattery:
-    def test_battery_is_none(self):
-        line = json.dumps({"adc": [], "air_temp_c": 20.0, "soil_temp_c": 15.0})
+# ---------------------------------------------------------------------------
+# Non-object JSON values
+# ---------------------------------------------------------------------------
+
+class TestNonObjectJson:
+    def test_json_array_returns_none(self):
+        assert parse_line("[1, 2, 3]") is None
+
+    def test_json_integer_returns_none(self):
+        assert parse_line("123") is None
+
+    def test_json_null_returns_none(self):
+        assert parse_line("null") is None
+
+    def test_json_string_returns_none(self):
+        assert parse_line('"hello"') is None
+
+
+# ---------------------------------------------------------------------------
+# Missing optional fields
+# ---------------------------------------------------------------------------
+
+class TestMissingOptionalFields:
+    def test_missing_battery_is_none(self):
+        line = json.dumps({
+            "channels": [{"dev": 0, "ch": 0, "status": 0, "raw": 15000}],
+            "air_temp_c": 20.0,
+        })
         r = parse_line(line)
         assert r is not None
         assert r.battery is None
-
-    def test_other_fields_intact(self):
-        line = json.dumps({"adc": [], "air_temp_c": 20.0, "soil_temp_c": 15.0})
-        r = parse_line(line)
         assert r.air_temp_c == pytest.approx(20.0)
 
+    def test_missing_temps_are_none(self):
+        line = json.dumps({
+            "channels": [{"dev": 0, "ch": 0, "status": 0, "raw": 15000}],
+            "battery": {"voltage": 3.8, "percent": 65},
+        })
+        r = parse_line(line)
+        assert r.air_temp_c is None
+        assert r.soil_temp_c is None
+        assert r.battery is not None
 
-class TestChannelWithErr:
-    def test_moisture_is_none_for_err(self):
-        line = json.dumps({"adc": [{"ch": 0, "raw": 15000, "status": "err"}]})
+
+# ---------------------------------------------------------------------------
+# Channel status handling (integer on wire)
+# ---------------------------------------------------------------------------
+
+class TestChannelStatus:
+    def test_status_0_is_ok(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 0, "raw": 15000}]})
+        r = parse_line(line)
+        assert r.channels[0].status == "ok"
+        assert r.channels[0].moisture_pct is not None
+
+    def test_status_1_is_err(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 1, "raw": 0}]})
+        r = parse_line(line)
+        assert r.channels[0].status == "err"
+        assert r.channels[0].moisture_pct is None
+
+    def test_status_nonzero_int_is_err(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 255, "raw": 0}]})
+        r = parse_line(line)
+        assert r.channels[0].status == "err"
+
+    def test_missing_status_treated_as_err(self):
+        # _safe_int(None) → None, None ≠ 0 → "err"
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "raw": 15000}]})
+        r = parse_line(line)
+        assert r.channels[0].status == "err"
+
+
+# ---------------------------------------------------------------------------
+# Channel entry validation
+# ---------------------------------------------------------------------------
+
+class TestChannelValidation:
+    def test_missing_dev_discards_channel(self):
+        line = json.dumps({"channels": [
+            {"ch": 0, "status": 0, "raw": 15000},               # no dev → discard
+            {"dev": 1, "ch": 0, "status": 0, "raw": 15000},     # valid → keep
+        ]})
+        r = parse_line(line)
+        assert len(r.channels) == 1
+        assert r.channels[0].dev == 1
+
+    def test_missing_ch_discards_channel(self):
+        line = json.dumps({"channels": [
+            {"dev": 0, "status": 0, "raw": 15000},              # no ch → discard
+            {"dev": 0, "ch": 1, "status": 0, "raw": 15000},    # valid → keep
+        ]})
+        r = parse_line(line)
+        assert len(r.channels) == 1
+        assert r.channels[0].ch == 1
+
+    def test_non_dict_channel_entry_discarded(self):
+        line = json.dumps({"channels": [
+            42,
+            {"dev": 0, "ch": 0, "status": 0, "raw": 15000},
+        ]})
+        r = parse_line(line)
+        assert len(r.channels) == 1
+
+    def test_channels_null_yields_empty_list(self):
+        # No channels but has battery → not discarded as empty
+        line = json.dumps({"channels": None, "battery": {"voltage": 3.8, "percent": 65}})
         r = parse_line(line)
         assert r is not None
-        assert r.adc[0].moisture_pct is None
+        assert r.channels == []
 
-    def test_ok_channels_still_computed(self):
-        line = json.dumps(
-            {
-                "adc": [
-                    {"ch": 0, "raw": 0, "status": "err"},
-                    {"ch": 1, "raw": 15000, "status": "ok"},
-                ]
-            }
-        )
+
+# ---------------------------------------------------------------------------
+# Wrong scalar types
+# ---------------------------------------------------------------------------
+
+class TestWrongFieldTypes:
+    def test_air_temp_string_becomes_none(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 0, "raw": 15000}],
+                           "air_temp_c": "hot"})
         r = parse_line(line)
-        assert r.adc[0].moisture_pct is None
-        assert r.adc[1].moisture_pct is not None
+        assert r.air_temp_c is None
 
+    def test_raw_string_gives_no_moisture(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 0, "raw": "x"}]})
+        r = parse_line(line)
+        assert len(r.channels) == 1
+        assert r.channels[0].moisture_pct is None
+
+    def test_unknown_sensor_gives_no_moisture(self):
+        # dev=9 is not in config.json → no calibration entry → moisture_pct None
+        line = json.dumps({"channels": [{"dev": 9, "ch": 0, "status": 0, "raw": 15000}]})
+        r = parse_line(line)
+        assert r.channels[0].moisture_pct is None
+
+
+# ---------------------------------------------------------------------------
+# Raw value clamping
+# ---------------------------------------------------------------------------
 
 class TestRawOutsideCalibration:
-    def test_raw_above_dry_clamps_to_zero(self):
-        # raw > dry_raw → negative pct → clamp to 0.0
-        line = json.dumps({"adc": [{"ch": 0, "raw": 30000, "status": "ok"}]})
-        r = parse_line(line)
-        assert r.adc[0].moisture_pct == pytest.approx(0.0)
+    def test_above_dry_raw_clamps_to_zero(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 0, "raw": 30000}]})
+        assert parse_line(line).channels[0].moisture_pct == pytest.approx(0.0)
 
-    def test_raw_below_wet_clamps_to_hundred(self):
-        # raw < wet_raw → pct > 100 → clamp to 100.0
-        line = json.dumps({"adc": [{"ch": 0, "raw": 5000, "status": "ok"}]})
-        r = parse_line(line)
-        assert r.adc[0].moisture_pct == pytest.approx(100.0)
+    def test_below_wet_raw_clamps_to_hundred(self):
+        line = json.dumps({"channels": [{"dev": 0, "ch": 0, "status": 0, "raw": 5000}]})
+        assert parse_line(line).channels[0].moisture_pct == pytest.approx(100.0)
 
     def test_moisture_pct_helper_clamps(self):
         assert _moisture_pct(30000, DRY, WET) == pytest.approx(0.0)
@@ -127,178 +310,30 @@ class TestRawOutsideCalibration:
         assert 0.0 <= _moisture_pct(19000, DRY, WET) <= 100.0
 
 
-class TestNonObjectJson:
-    """Scalars and other non-array/non-object JSON values must return None."""
-
-    def test_json_array_of_integers_returns_none(self):
-        # All entries discarded as non-dict, nothing left → None.
-        assert parse_line("[1, 2, 3]") is None
-
-    def test_json_integer(self):
-        assert parse_line("123") is None
-
-    def test_json_null(self):
-        assert parse_line("null") is None
-
-    def test_json_string(self):
-        assert parse_line('"hello"') is None
-
-
-class TestAdcNullOrNonDict:
-    """Fix 2: 'adc': null or non-dict channel entries must not crash."""
-
-    def test_adc_null_returns_reading_with_empty_adc(self):
-        line = json.dumps({"adc": None, "air_temp_c": 20.0})
-        r = parse_line(line)
-        assert r is not None
-        assert r.adc == []
-
-    def test_adc_not_a_list(self):
-        # No channels parsed, no other data → None.
-        assert parse_line(json.dumps({"adc": "bad"})) is None
-
-    def test_adc_channel_is_integer(self):
-        line = json.dumps({"adc": [42, {"ch": 1, "raw": 15000, "status": "ok"}]})
-        r = parse_line(line)
-        assert r is not None
-        # integer entry discarded; valid entry kept
-        assert len(r.adc) == 1
-        assert r.adc[0].ch == 1
-
-    def test_adc_channel_is_string(self):
-        line = json.dumps({"adc": ["bad", {"ch": 0, "raw": 15000, "status": "ok"}]})
-        r = parse_line(line)
-        assert r is not None
-        assert len(r.adc) == 1
-
-
-class TestWrongFieldTypes:
-    """Fix 3: non-numeric scalar fields must not raise ValidationError."""
-
-    def test_air_temp_string_becomes_none(self):
-        line = json.dumps({"adc": [], "air_temp_c": "abc", "soil_temp_c": 15.0})
-        r = parse_line(line)
-        assert r is not None
-        assert r.air_temp_c is None
-        assert r.soil_temp_c == pytest.approx(15.0)
-
-    def test_soil_temp_string_becomes_none(self):
-        line = json.dumps({"adc": [], "air_temp_c": 20.0, "soil_temp_c": "hot"})
-        r = parse_line(line)
-        assert r is not None
-        assert r.soil_temp_c is None
-
-    def test_raw_string_gives_no_moisture(self):
-        # Channel stays in the list but raw=None → moisture_pct=None
-        line = json.dumps({"adc": [{"ch": 0, "raw": "x", "status": "ok"}]})
-        r = parse_line(line)
-        assert r is not None
-        assert len(r.adc) == 1
-        assert r.adc[0].moisture_pct is None
-
-
-class TestMissingChKey:
-    """Fix 4: channel entries without 'ch' must be discarded, not mapped to ch=0."""
-
-    def test_channel_without_ch_is_discarded(self):
-        # Only entry has no "ch" → discarded → nothing left → None.
-        assert parse_line(json.dumps({"adc": [{"raw": 15000, "status": "ok"}]})) is None
-
-    def test_valid_channel_kept_alongside_discarded(self):
-        line = json.dumps(
-            {
-                "adc": [
-                    {"raw": 15000, "status": "ok"},           # no "ch" → discard
-                    {"ch": 2, "raw": 15000, "status": "ok"},  # valid → keep
-                ]
-            }
-        )
-        r = parse_line(line)
-        assert r is not None
-        assert len(r.adc) == 1
-        assert r.adc[0].ch == 2
-
-
-# ---------------------------------------------------------------------------
-# Legacy format
-# ---------------------------------------------------------------------------
-
-LEGACY_LINE = json.dumps(
-    [
-        {"ch": 0, "raw": 15234, "status": "ok"},
-        {"ch": 1, "raw": 14980, "status": "ok"},
-        {"ch": 2, "raw": 0, "status": "err"},
-        {"ch": 3, "raw": 16012, "status": "ok"},
-    ]
-)
-
-
-class TestLegacyFormat:
-    """Bare JSON array (old firmware) must be accepted like the current object format."""
-
-    def test_returns_reading(self):
-        assert parse_line(LEGACY_LINE) is not None
-
-    def test_four_channels_parsed(self):
-        r = parse_line(LEGACY_LINE)
-        assert len(r.adc) == 4
-
-    def test_temps_and_battery_are_none(self):
-        r = parse_line(LEGACY_LINE)
-        assert r.air_temp_c is None
-        assert r.soil_temp_c is None
-        assert r.battery is None
-
-    def test_moisture_computed_for_ok_channels(self):
-        expected = (DRY - 15234) / (DRY - WET) * 100
-        r = parse_line(LEGACY_LINE)
-        assert r.adc[0].moisture_pct == pytest.approx(expected)
-
-    def test_err_channel_has_no_moisture(self):
-        r = parse_line(LEGACY_LINE)
-        assert r.adc[2].status == "err"
-        assert r.adc[2].moisture_pct is None
-
-    def test_empty_array(self):
-        # No channels, no temps, no battery → None.
-        assert parse_line("[]") is None
-
-    def test_timestamp_present(self):
-        r = parse_line(LEGACY_LINE)
-        assert r.timestamp is not None
-
-
 # ---------------------------------------------------------------------------
 # Empty-reading guard
 # ---------------------------------------------------------------------------
 
-
 class TestEmptyReading:
-    """Lines that yield no usable data after parsing must return None."""
-
-    def test_integer_array(self):
-        # All entries non-dict → discarded → no channels, no temps, no battery.
-        assert parse_line("[1, 2, 3]") is None
-
-    def test_empty_array(self):
-        assert parse_line("[]") is None
-
-    def test_adc_null_only(self):
-        # {"adc": null} with no other fields.
-        assert parse_line(json.dumps({"adc": None})) is None
-
-    def test_empty_object(self):
+    def test_empty_object_returns_none(self):
         assert parse_line("{}") is None
 
-    def test_adc_null_with_temp_is_kept(self):
-        # adc null but temperature present → still useful → not None.
-        r = parse_line(json.dumps({"adc": None, "air_temp_c": 20.0}))
-        assert r is not None
-        assert r.adc == []
-        assert r.air_temp_c == pytest.approx(20.0)
+    def test_channels_null_no_other_data_returns_none(self):
+        assert parse_line(json.dumps({"channels": None})) is None
+
+    def test_empty_channels_no_other_data_returns_none(self):
+        assert parse_line(json.dumps({"channels": []})) is None
+
+    def test_all_channels_discarded_no_other_data_returns_none(self):
+        # Channel missing dev → discarded; nothing left
+        assert parse_line(json.dumps({"channels": [{"ch": 0, "status": 0, "raw": 1}]})) is None
 
     def test_battery_only_is_kept(self):
-        # No adc, no temps, but battery present → useful → not None.
         r = parse_line(json.dumps({"battery": {"voltage": 3.8, "percent": 65}}))
         assert r is not None
         assert r.battery is not None
+
+    def test_air_temp_only_is_kept(self):
+        r = parse_line(json.dumps({"air_temp_c": 22.0}))
+        assert r is not None
+        assert r.air_temp_c == pytest.approx(22.0)

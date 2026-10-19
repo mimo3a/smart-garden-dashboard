@@ -1,9 +1,21 @@
 {
-  "calibration": [
-    {"channel": 0, "dry_raw": 26000, "wet_raw": 12000},
-    {"channel": 1, "dry_raw": 26000, "wet_raw": 12000},
-    {"channel": 2, "dry_raw": 26000, "wet_raw": 12000},
-    {"channel": 3, "dry_raw": 26000, "wet_raw": 12000}
+  "sensors": [
+    {"dev": 0, "ch": 0, "name": "Beet 1",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 0, "ch": 1, "name": "Beet 2",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 0, "ch": 2, "name": "Beet 3",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 0, "ch": 3, "name": "Beet 4",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 1, "ch": 0, "name": "Beet 5",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 1, "ch": 1, "name": "Beet 6",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 1, "ch": 2, "name": "Beet 7",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 1, "ch": 3, "name": "Beet 8",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 2, "ch": 0, "name": "Beet 9",  "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 2, "ch": 1, "name": "Beet 10", "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 2, "ch": 2, "name": "Beet 11", "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 2, "ch": 3, "name": "Beet 12", "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 3, "ch": 0, "name": "Beet 13", "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 3, "ch": 1, "name": "Beet 14", "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 3, "ch": 2, "name": "Beet 15", "dry_raw": 26000, "wet_raw": 12000},
+    {"dev": 3, "ch": 3, "name": "Beet 16", "dry_raw": 26000, "wet_raw": 12000}
   ],
   "thresholds": {
     "soil_moisture_min_percent": 30,

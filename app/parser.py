@@ -13,11 +13,11 @@ from app.models import AdcChannel, BatteryReading, Reading
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.json"
-_calibration_cache: Optional[dict[int, dict]] = None
+_calibration_cache: Optional[dict[tuple[int, int], dict]] = None
 
 
-def _load_calibration() -> dict[int, dict]:
-    """Return calibration dict keyed by channel index, loaded once from config.json."""
+def _load_calibration() -> dict[tuple[int, int], dict]:
+    """Return sensor calibration keyed by (dev, ch), loaded once from config.json."""
     global _calibration_cache
     if _calibration_cache is not None:
         return _calibration_cache
@@ -25,7 +25,8 @@ def _load_calibration() -> dict[int, dict]:
         with _CONFIG_PATH.open(encoding="utf-8") as fh:
             cfg = json.load(fh)
         _calibration_cache = {
-            entry["channel"]: entry for entry in cfg.get("calibration", [])
+            (entry["dev"], entry["ch"]): entry
+            for entry in cfg.get("sensors", [])
         }
     except Exception as exc:
         logger.warning("Could not load calibration from %s: %s", _CONFIG_PATH, exc)
@@ -67,59 +68,74 @@ def _safe_int(value: Any) -> Optional[int]:
 
 
 def parse_line(line: str) -> Optional[Reading]:
-    """Parse a single UART JSON line into a Reading; return None on invalid input."""
+    """Parse a single UART JSON line into a Reading; return None on invalid input.
+
+    Expected wire format::
+
+        {"channels":[{"dev":0,"ch":0,"status":0,"raw":15234}, ...],
+         "air_temp_c":22.4,"soil_temp_c":18.1,
+         "battery":{"voltage":3.91,"percent":76}}
+
+    Rules:
+    - ``status`` is an integer: 0 = ok, any other value = err.
+    - ``air_temp_c``, ``soil_temp_c``, ``battery`` are optional.
+    - Fewer than 16 channels are allowed (partial hardware build).
+    - Non-JSON lines (e.g. boot messages) are discarded and return None.
+    - Lines with no usable data (no channels, no temps, no battery) return None.
+    """
     try:
         data = json.loads(line)
     except json.JSONDecodeError:
         logger.warning("Invalid JSON line: %r", line[:120])
         return None
 
-    # Legacy format: bare ADC array sent by older firmware versions.
-    # Normalise to standard object so the rest of the function is unchanged.
-    if isinstance(data, list):
-        logger.debug("Legacy format (bare ADC array) detected, normalising")
-        data = {"adc": data}
-    elif not isinstance(data, dict):
-        logger.warning("JSON is not an object or array (got %s): %r", type(data).__name__, line[:120])
+    if not isinstance(data, dict):
+        logger.warning(
+            "JSON is not an object (got %s): %r", type(data).__name__, line[:120]
+        )
         return None
 
     calibration = _load_calibration()
+    channels: list[AdcChannel] = []
+    raw_channels = data.get("channels")
 
-    adc_channels: list[AdcChannel] = []
-    raw_adc = data.get("adc")
-
-    # Fix 2: "adc" may be null or a non-list value.
-    if raw_adc is not None:
-        if not isinstance(raw_adc, list):
-            logger.warning("'adc' is not a list (%r), ignoring", type(raw_adc).__name__)
+    if raw_channels is not None:
+        if not isinstance(raw_channels, list):
+            logger.warning(
+                "'channels' is not a list (%s), ignoring", type(raw_channels).__name__
+            )
         else:
-            for ch_data in raw_adc:
-                # Fix 2b: each channel entry must be a dict.
+            for ch_data in raw_channels:
                 if not isinstance(ch_data, dict):
-                    logger.warning("ADC entry is not an object (%r), discarding", ch_data)
+                    logger.warning(
+                        "Channel entry is not an object (%r), discarding", ch_data
+                    )
                     continue
 
+                dev_idx = _safe_int(ch_data.get("dev"))
                 ch_idx = _safe_int(ch_data.get("ch"))
 
-                # Fix 4: discard channels without a valid "ch" key.
-                if ch_idx is None:
-                    logger.warning("ADC entry missing 'ch', discarding: %r", ch_data)
+                if dev_idx is None or ch_idx is None:
+                    logger.warning(
+                        "Channel entry missing 'dev' or 'ch', discarding: %r", ch_data
+                    )
                     continue
 
-                # Fix 3a: raw may be a wrong type.
                 raw = _safe_int(ch_data.get("raw"))
-                status = ch_data.get("status", "err")
-                if not isinstance(status, str):
-                    status = "err"
+                # status is an integer on the wire: 0 = ok, anything else = err
+                status_int = _safe_int(ch_data.get("status"))
+                status = "ok" if status_int == 0 else "err"
 
                 moisture: Optional[float] = None
-                if status == "ok" and raw is not None and ch_idx in calibration:
-                    cal = calibration[ch_idx]
+                cal_key = (dev_idx, ch_idx)
+                if status == "ok" and raw is not None and cal_key in calibration:
+                    cal = calibration[cal_key]
                     moisture = _moisture_pct(raw, cal["dry_raw"], cal["wet_raw"])
 
                 try:
-                    adc_channels.append(
+                    channels.append(
                         AdcChannel(
+                            dev=dev_idx,
                             ch=ch_idx,
                             raw=raw,
                             status=status,
@@ -127,7 +143,9 @@ def parse_line(line: str) -> Optional[Reading]:
                         )
                     )
                 except Exception as exc:
-                    logger.warning("Skipping invalid ADC channel %r: %s", ch_data, exc)
+                    logger.warning(
+                        "Skipping invalid channel %r: %s", ch_data, exc
+                    )
 
     battery: Optional[BatteryReading] = None
     batt_data = data.get("battery")
@@ -140,19 +158,17 @@ def parse_line(line: str) -> Optional[Reading]:
         except (KeyError, TypeError, ValueError) as exc:
             logger.warning("Skipping malformed battery data: %s", exc)
 
-    # Fix 3b: wrong scalar types must not raise ValidationError.
     air_temp_c = _safe_float(data.get("air_temp_c"))
     soil_temp_c = _safe_float(data.get("soil_temp_c"))
 
-    # Discard lines that carry no usable data at all.
-    if not adc_channels and air_temp_c is None and soil_temp_c is None and battery is None:
+    if not channels and air_temp_c is None and soil_temp_c is None and battery is None:
         logger.warning("No usable data in line, discarding: %r", line[:120])
         return None
 
     try:
         return Reading(
             timestamp=datetime.now(tz=timezone.utc),
-            adc=adc_channels,
+            channels=channels,
             air_temp_c=air_temp_c,
             soil_temp_c=soil_temp_c,
             battery=battery,

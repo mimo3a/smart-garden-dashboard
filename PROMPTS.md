@@ -90,6 +90,33 @@ Review von serial_reader.py:
 Ergänze einen Test: Callback wirft eine Exception, nachfolgende Readings werden trotzdem zugestellt.
 Führe alle Tests aus.
 
+## Folge-Prompt 4c
+
+Hardwaretest: Die echte Firmware sendet ein anderes Format als in AGENTS.md beschrieben. Beispielzeile
+der aktuellen Entwicklungsplatine (Eingänge noch unbeschaltet, Werte bedeutungslos):
+{"channels":[{"dev":0,"ch":0,"status":0,"raw":4781},{"dev":0,"ch":1,"status":0,"raw":4755},{"dev":0,"ch":2,"status":0,"raw":4728},{"dev":0,"ch":3,"status":0,"raw":4772},{"dev":1,"ch":0,"status":0,"raw":25351},{"dev":1,"ch":1,"status":0,"raw":24649},{"dev":1,"ch":2,"status":0,"raw":23800},{"dev":1,"ch":3,"status":0,"raw":23156}]}
+Zielausbau: 16 Bodenfeuchte-Sensoren = 4× ADS1115 (dev 0–3) × ch 0–3, dazu Luft- und Bodentemperatur
+und Batterie. Die finale Firmware sendet diese zusätzlich in derselben Zeile als air_temp_c,
+soil_temp_c und battery {voltage, percent}. Für die Hausübung arbeiten wir mit dem Simulator.
+Regeln für das Format:
+- Root-Key "channels", Kanal-ID ist (dev, ch). Es können weniger als 16 Kanäle kommen (Ausbaustufe).
+- status ist eine Zahl: 0 = ok, alles andere = err.
+- air_temp_c, soil_temp_c, battery sind optional.
+- Nicht-JSON-Zeilen wie "USART1 PA9 OK" (Boot-Meldung) verwerfen.
+Änderungen:
+1. config.json: statt "calibration" eine Liste "sensors" mit {dev, ch, name, dry_raw, wet_raw} für
+   alle 16 Kanäle (name z. B. "Beet {n}", dry_raw 26000, wet_raw 12000). Feuchte nur für
+   konfigurierte Kanäle berechnen; unbekannte Kanäle mit raw/status übernehmen, moisture_pct None.
+2. parser.py: dieses Format als einziges Format. Das alte "adc"-Format und das Legacy-Array
+   entfernen (sie beruhten auf einer falschen Annahme), inkl. zugehöriger Tests – keine toten
+   Codepfade. Die Robustheitsregeln (nie abstürzen, leere Readings → None) bleiben.
+3. models.py: Kanal mit dev und ch.
+4. simulator.py: dieses Format mit allen 16 Kanälen, numerischem status, air_temp_c, soil_temp_c
+   und battery erzeugen. Die Dynamik pro Kanal unabhängig (unterschiedliche Austrocknung je Beet).
+5. AGENTS.md und CLAUDE.md: Datenformat-Abschnitt durch dieses Format ersetzen.
+Tests: echte Beispielzeile oben (8 Kanäle, keine Temperaturen) und eine vollständige Zeile
+(16 Kanäle + Temperaturen + Batterie). Alle Tests ausführen.
+
 ## Prompt 5 – Speicherung in SQLite
 ```
 Implementiere app/db.py: Tabelle readings (id, ts, source, moisture_ch0..ch3 als Prozent,

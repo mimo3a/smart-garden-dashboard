@@ -27,11 +27,11 @@ class TestOutputShape:
         lines = _take(simulate(interval=0, seed=SEED), 5)
         assert all(isinstance(line, str) for line in lines)
 
-    def test_valid_lines_have_four_adc_channels(self):
+    def test_valid_lines_have_sixteen_channels(self):
         for line in _take(simulate(interval=0, seed=SEED), 30):
             r = parse_line(line)
             if r is not None:
-                assert len(r.adc) == 4
+                assert len(r.channels) == 16
 
     def test_valid_lines_have_battery(self):
         for line in _take(simulate(interval=0, seed=SEED), 30):
@@ -77,7 +77,7 @@ class TestValueRanges:
 
     def test_ok_channels_moisture_in_range(self):
         for r in self.valid:
-            for ch in r.adc:
+            for ch in r.channels:
                 if ch.status == "ok":
                     assert 0.0 <= ch.moisture_pct <= 100.0
 
@@ -137,7 +137,7 @@ class TestFaultInjection:
         for line in _take(simulate(interval=0, seed=SEED), 500):
             r = parse_line(line)
             if r is not None:
-                err_count += sum(1 for ch in r.adc if ch.status == "err")
+                err_count += sum(1 for ch in r.channels if ch.status == "err")
         assert err_count >= 1
 
     def test_broken_lines_are_minority(self):

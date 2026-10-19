@@ -9,8 +9,13 @@ from pydantic import BaseModel
 
 
 class AdcChannel(BaseModel):
-    """One ADS1115 channel (soil-moisture sensor)."""
+    """One ADS1115 channel (soil-moisture sensor).
 
+    Identified by the (dev, ch) pair: dev = ADS1115 device index (0–3),
+    ch = channel on that device (0–3).
+    """
+
+    dev: int
     ch: int
     raw: Optional[int] = None
     status: str  # "ok" | "err"
@@ -28,7 +33,7 @@ class Reading(BaseModel):
     """One complete sensor snapshot received via UART."""
 
     timestamp: datetime
-    adc: list[AdcChannel]
+    channels: list[AdcChannel]
     air_temp_c: Optional[float] = None
     soil_temp_c: Optional[float] = None
     battery: Optional[BatteryReading] = None

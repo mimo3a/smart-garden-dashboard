@@ -16,11 +16,11 @@ from app.simulator import SimulatorReader
 
 VALID_LINE = json.dumps(
     {
-        "adc": [
-            {"ch": 0, "raw": 15234, "status": "ok"},
-            {"ch": 1, "raw": 14980, "status": "ok"},
-            {"ch": 2, "raw": 0, "status": "err"},
-            {"ch": 3, "raw": 16012, "status": "ok"},
+        "channels": [
+            {"dev": 0, "ch": 0, "status": 0, "raw": 15234},
+            {"dev": 0, "ch": 1, "status": 0, "raw": 14980},
+            {"dev": 0, "ch": 2, "status": 1, "raw": 0},
+            {"dev": 0, "ch": 3, "status": 0, "raw": 16012},
         ],
         "air_temp_c": 22.4,
         "soil_temp_c": 18.1,

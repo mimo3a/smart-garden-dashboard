@@ -18,16 +18,22 @@ from app.serial_reader import DataSource
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.json"
-_NUM_CHANNELS = 4
+_NUM_DEVS = 4
+_NUM_CH = 4
+_NUM_SENSORS = _NUM_DEVS * _NUM_CH  # 16 total
 
 
-def _load_calibration_by_channel() -> dict[int, dict]:
-    """Load per-channel calibration from config.json; fall back to defaults on error."""
-    defaults = {ch: {"dry_raw": 26000, "wet_raw": 12000} for ch in range(_NUM_CHANNELS)}
+def _load_calibration_by_sensor() -> dict[tuple[int, int], dict]:
+    """Load per-sensor calibration from config.json, keyed by (dev, ch)."""
+    defaults = {
+        (dev, ch): {"dry_raw": 26000, "wet_raw": 12000}
+        for dev in range(_NUM_DEVS)
+        for ch in range(_NUM_CH)
+    }
     try:
         with _CONFIG_PATH.open(encoding="utf-8") as fh:
             cfg = json.load(fh)
-        cal = {entry["channel"]: entry for entry in cfg.get("calibration", [])}
+        cal = {(e["dev"], e["ch"]): e for e in cfg.get("sensors", [])}
         return cal if cal else defaults
     except Exception:
         return defaults
@@ -56,25 +62,31 @@ def _day_cycle_target() -> float:
 def simulate(interval: float = 1.0, seed: Optional[int] = None) -> Iterator[str]:
     """Yield one JSON line per *interval* seconds with realistic random-walk dynamics.
 
-    Dynamics:
-    - Soil moisture per channel: slow evaporation drift, occasional watering jump.
-    - Air temperature: sinusoidal day cycle (UTC) with Gaussian noise.
-    - Soil temperature: follows air temperature with thermal inertia.
-    - Battery: slow, monotonic discharge.
+    Generates all 16 sensors (4 ADS1115 devices × 4 channels each).  Each
+    sensor has an independent moisture state with its own evaporation rate and
+    watering events, so different beds can be at different moisture levels.
+
+    Wire format::
+
+        {"channels":[{"dev":0,"ch":0,"status":0,"raw":15234}, ...],
+         "air_temp_c":22.4,"soil_temp_c":18.1,
+         "battery":{"voltage":3.91,"percent":76}}
 
     Fault injection (~2 % overall):
-    - ~1 % of iterations: yield a malformed JSON line so the parser's error path is hit.
-    - ~0.5 % per channel per iteration: status "err" instead of "ok".
+    - ~1 % of iterations: yield a malformed JSON line.
+    - ~0.5 % per channel per iteration: status 1 (err) instead of 0 (ok).
 
     Args:
         interval: Seconds to sleep between yields (pass 0 in tests).
         seed:     Optional seed for the internal RNG (for reproducible tests).
     """
     rng = random.Random(seed)
-    calibration = _load_calibration_by_channel()
+    calibration = _load_calibration_by_sensor()
 
-    # ── initial state ────────────────────────────────────────────────────────
-    moisture: list[float] = [rng.uniform(50.0, 75.0) for _ in range(_NUM_CHANNELS)]
+    # Independent moisture state for each of the 16 sensors: moisture[dev*4+ch]
+    moisture: list[float] = [
+        rng.uniform(50.0, 75.0) for _ in range(_NUM_SENSORS)
+    ]
     air_temp: float = _day_cycle_target() + rng.gauss(0, 1.0)
     soil_temp: float = air_temp - rng.uniform(2.0, 5.0)
     battery_pct: float = rng.uniform(70.0, 90.0)
@@ -82,7 +94,7 @@ def simulate(interval: float = 1.0, seed: Optional[int] = None) -> Iterator[str]
     while True:
         # ── fault injection: broken JSON line (~1 %) ─────────────────────────
         if rng.random() < 0.01:
-            yield '{"adc": [broken'
+            yield '{"channels": [broken'
             time.sleep(interval)
             continue
 
@@ -99,25 +111,28 @@ def simulate(interval: float = 1.0, seed: Optional[int] = None) -> Iterator[str]
         battery_pct = max(0.0, min(100.0, battery_pct))
         battery_voltage = 3.0 + battery_pct / 100.0 * 1.2
 
-        # ── soil moisture + ADC channels ─────────────────────────────────────
-        adc_list = []
-        for ch in range(_NUM_CHANNELS):
-            if rng.random() < 0.005:                   # watering event
-                moisture[ch] = rng.uniform(75.0, 98.0)
-            else:
-                moisture[ch] -= rng.uniform(0.03, 0.10)
-            moisture[ch] = max(5.0, min(100.0, moisture[ch]))
+        # ── 16 soil moisture sensors (independent per bed) ───────────────────
+        channel_list = []
+        for dev in range(_NUM_DEVS):
+            for ch in range(_NUM_CH):
+                idx = dev * _NUM_CH + ch
+                if rng.random() < 0.005:                    # watering event
+                    moisture[idx] = rng.uniform(75.0, 98.0)
+                else:
+                    # Each bed dries at a slightly different rate
+                    moisture[idx] -= rng.uniform(0.03, 0.12)
+                moisture[idx] = max(5.0, min(100.0, moisture[idx]))
 
-            if rng.random() < 0.005:                   # err channel (~0.5 %)
-                adc_list.append({"ch": ch, "raw": 0, "status": "err"})
-            else:
-                cal = calibration.get(ch, {"dry_raw": 26000, "wet_raw": 12000})
-                raw = _moisture_to_raw(moisture[ch], cal["dry_raw"], cal["wet_raw"])
-                adc_list.append({"ch": ch, "raw": raw, "status": "ok"})
+                if rng.random() < 0.005:                    # ~0.5 % err per channel
+                    channel_list.append({"dev": dev, "ch": ch, "status": 1, "raw": 0})
+                else:
+                    cal = calibration.get((dev, ch), {"dry_raw": 26000, "wet_raw": 12000})
+                    raw = _moisture_to_raw(moisture[idx], cal["dry_raw"], cal["wet_raw"])
+                    channel_list.append({"dev": dev, "ch": ch, "status": 0, "raw": raw})
 
         yield json.dumps(
             {
-                "adc": adc_list,
+                "channels": channel_list,
                 "air_temp_c": round(air_temp, 1),
                 "soil_temp_c": round(soil_temp, 1),
                 "battery": {

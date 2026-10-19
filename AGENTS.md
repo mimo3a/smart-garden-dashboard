@@ -12,27 +12,24 @@ Ohne Platine läuft die App im Simulator-Modus (`--simulate`), damit sie überal
 - Läuft unter Windows (COM-Ports, z. B. `COM5`) und Linux (`/dev/ttyACM0`)
 
 ## Datenformat (UART, 115200 Baud, eine JSON-Zeile pro Messung, `\n`-terminiert)
-
-### Aktuelles Format
 ```json
-{"adc":[{"ch":0,"raw":15234,"status":"ok"},{"ch":1,"raw":14980,"status":"ok"},{"ch":2,"raw":0,"status":"err"},{"ch":3,"raw":16012,"status":"ok"}],
+{"channels":[{"dev":0,"ch":0,"status":0,"raw":15234},{"dev":0,"ch":1,"status":0,"raw":14980},
+             {"dev":0,"ch":2,"status":1,"raw":0},    {"dev":0,"ch":3,"status":0,"raw":16012},
+             ...bis zu 16 Kanäle (dev 0–3, ch 0–3)...],
  "air_temp_c":22.4,"soil_temp_c":18.1,"battery":{"voltage":3.91,"percent":76}}
 ```
-- `adc`: 4 Kanäle des ADS1115 = Bodenfeuchte-Sensoren (Rohwert 0–32767, `status` = `ok` | `err`)
-- `air_temp_c`: Lufttemperatur in °C
-- `soil_temp_c`: Bodentemperatur in °C
-- `battery.voltage` in V, `battery.percent` 0–100
-- Fehlende Felder oder `status: "err"` sind erlaubt und dürfen die App nicht abstürzen lassen.
+- `channels`: bis zu 16 Bodenfeuchte-Sensoren (4× ADS1115, `dev` 0–3, `ch` 0–3).  
+  Weniger Kanäle sind erlaubt (Ausbaustufen).
+- `status`: **Ganzzahl** — `0` = ok, alles andere = err (Sensor fehlerhaft/nicht angeschlossen).
+- `raw`: ADS1115-Rohwert 0–32767.
+- `air_temp_c`: Lufttemperatur in °C (optional).
+- `soil_temp_c`: Bodentemperatur in °C (optional).
+- `battery.voltage` in V, `battery.percent` 0–100 (optional).
+- Nicht-JSON-Zeilen (z. B. Boot-Meldung `USART1 PA9 OK`) werden verworfen.
+- Fehlende Felder oder Kanäle mit `status ≠ 0` dürfen die App nicht abstürzen lassen.
 - Der Zeitstempel wird beim Empfang im Backend gesetzt (UTC, ISO 8601).
-- Feuchte in %: lineare Umrechnung aus `raw` mit Kalibrierwerten `dry_raw` / `wet_raw` pro Kanal aus `config.json`.
-
-### Legacy-Format (ältere Firmware)
-Ältere Firmware-Versionen senden nur ein JSON-Array der ADC-Kanäle, ohne Temperaturen oder Batterie:
-```json
-[{"ch":0,"raw":15234,"status":"ok"},{"ch":1,"raw":14980,"status":"ok"},{"ch":2,"raw":0,"status":"err"},{"ch":3,"raw":16012,"status":"ok"}]
-```
-`parse_line` erkennt beide Formate automatisch. Bei Legacy-Zeilen sind `air_temp_c`, `soil_temp_c`
-und `battery` im `Reading`-Objekt `None`.
+- Feuchte in %: lineare Umrechnung aus `raw` mit `dry_raw`/`wet_raw` pro (dev, ch) aus `config.json` (`sensors`-Liste).  
+  Unbekannte (dev, ch)-Kombinationen → `moisture_pct = None`.
 
 ## Projektstruktur
 ```
@@ -70,3 +67,6 @@ config.json        # Kalibrierung + Schwellwerte
 - Start mit Platine: `python -m app.main --port COM5 --baud 115200`
 - Dashboard: http://127.0.0.1:8000
 - Tests: `pytest -q`
+
+- Umgebung: Windows, PowerShell. Python immer über .\.venv\Scripts\python.exe aufrufen.
+- Antworten und Zusammenfassungen auf Deutsch.
