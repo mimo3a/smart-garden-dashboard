@@ -6,8 +6,11 @@ Die "Prüfen"-Punkte sind für dich, nicht für die KI. Was nicht klappt → Fee
 
 ---
 
+Welche Dateien siehst du im Projektordner und was steht in CLAUDE.md zusammengefasst?
+
 ## Prompt 1 – Projekt-Setup
 ```
+Hinweis: Wir sind unter Windows, nutze PowerShell-Befehle.
 Lies AGENTS.md. Lege das Projektgerüst genau nach der dort beschriebenen Struktur an:
 requirements.txt, leere Module mit Docstrings, config.json mit Kalibrierwerten für 4 Kanäle
 (dry_raw=26000, wet_raw=12000) und Schwellwerten (Bodenfeuchte min 30 %, Lufttemperatur 5–35 °C,

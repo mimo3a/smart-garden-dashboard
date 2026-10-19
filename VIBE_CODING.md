@@ -7,9 +7,9 @@ _Was sollte gebaut werden? Bezug zum Smart-Garden-Projekt (STM32, ADS1115, UART-
 Welche Vorkenntnisse hatte ich in Python/FastAPI/Frontend?_
 
 ## 2. Werkzeuge
-- Coding-Tool: _z. B. Claude Code / GitHub Copilot (Agent Mode) / Codex_
-- Modell: _…_
-- Weitere: VS Code, Git, Python _3.x_, Windows _…_
+- Coding-Tool: _Claude Code (CLI through npx)_
+- Modell: _Sonnet 4.6_
+- Weitere: VS Code, Git, Python _3.x_, Windows _11_
 - Kontextdatei: `AGENTS.md` (bzw. `CLAUDE.md`) – siehe Repository
 
 ## 3. Vorgehen
@@ -35,13 +35,13 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 - _…_
 
 ## 6. Was nicht gut funktioniert hat
-- _z. B. falsche Umrechnung der Feuchte (trocken = hoher Rohwert), musste korrigiert werden_
+- Шум в окружении. Агент сначала запустил PowerShell-команды (Get-ChildItem) в bash, получил command not found и только потом переключился на PowerShell. Он не учёл, что работает под Windows, и тратил на это лишние шаги и токены. Это пункт для раздела 6.
 - _…_
 
 ## 7. Gefundene Probleme der KI
 | Problem | Art (Halluzination / Bug / Security / Wartbarkeit) | Wie entdeckt | Lösung |
 |---------|----------------------------------------------------|--------------|--------|
-| | | | |
+Догадка вместо проверки. Про AGENTS.md агент написал «Vermutlich ähnliche Anweisungen», то есть не открыл файл и угадал. На деле файл идентичен CLAUDE.md. Мелкий, но наглядный пример того, что LLM уверенно додумывает вместо того, чтобы прочитать. Это для раздела 7, тип «Halluzination / Annahme».
 
 ## 8. Test mit echter Hardware
 _Lief der UART-Reader mit der Nucleo-Platine? COM-Port-Probleme unter Windows? Verhalten beim Abziehen._

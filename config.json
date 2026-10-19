@@ -1,0 +1,16 @@
+{
+  "calibration": [
+    {"channel": 0, "dry_raw": 26000, "wet_raw": 12000},
+    {"channel": 1, "dry_raw": 26000, "wet_raw": 12000},
+    {"channel": 2, "dry_raw": 26000, "wet_raw": 12000},
+    {"channel": 3, "dry_raw": 26000, "wet_raw": 12000}
+  ],
+  "thresholds": {
+    "soil_moisture_min_percent": 30,
+    "air_temp_min_c": 5,
+    "air_temp_max_c": 35,
+    "soil_temp_min_c": 5,
+    "soil_temp_max_c": 30,
+    "battery_min_percent": 20
+  }
+}
