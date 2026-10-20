@@ -27,7 +27,8 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | 5 | SQLite | Flaches Schema mit 48 Spalten, 107/107 Tests | Veralteter Prompt aus PROMPTS.md verwendet → Folge-Prompt 5b | … |
 | 5b | Folge-Prompt Normalisierung | 2 Tabellen + FK/CASCADE, JOIN, Purge, eingefrorene Zeit für Grenztest, 120/120 | – | … |
 | 6 | REST-API | | | |
-| 7 | Dashboard | | | |
+| 7b | Folge-Prompt Browser-Test | Zeitachse, 0–100 %, Balken, no-cache, Wrapper | Lückenschwelle falsch berechnet → 7c | … |
+| 7c | Folge-Prompt Lücken | Bucket-Breite wie Backend, x-Achse fixiert, 156/156 | – | … |
 | 8 | Alarme | | | |
 | 9 | KI-Review | | | |
 | 10 | README | | | |
