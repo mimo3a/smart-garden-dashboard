@@ -323,6 +323,15 @@ class TestStaticFiles:
         insert_reading(make_reading(), source="test")
         assert client.get("/api/latest").status_code == 200
 
+    def test_static_files_have_no_cache_header(self, client):
+        """Static files must carry Cache-Control: no-cache to prevent stale copies."""
+        for path in ("/", "/style.css", "/app.js"):
+            r = client.get(path)
+            cc = r.headers.get("cache-control", "").lower()
+            assert "no-cache" in cc, (
+                f"Static path '{path}' missing Cache-Control: no-cache (got: '{cc}')"
+            )
+
     def test_index_html_references_all_load(self, client):
         """Every local CSS/JS file referenced in index.html must return 200.
 

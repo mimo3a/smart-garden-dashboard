@@ -2,11 +2,91 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Garden Dashboard</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <!-- Dashboard UI – to be implemented -->
+
+  <div id="status-banner" class="status-banner hidden"></div>
+
+  <header class="site-header">
+    <h1 class="site-title">Smart Garden Dashboard</h1>
+    <div class="header-stats">
+
+      <div class="stat">
+        <span class="stat-label">Lufttemperatur</span>
+        <span id="air-temp" class="stat-value">–</span>
+      </div>
+
+      <div class="stat">
+        <span class="stat-label">Bodentemperatur</span>
+        <span id="soil-temp" class="stat-value">–</span>
+      </div>
+
+      <div class="stat">
+        <span class="stat-label">Batterie</span>
+        <span id="battery-pct" class="stat-value">–</span>
+        <div class="batt-track"><div id="battery-bar" class="batt-fill"></div></div>
+        <span id="battery-voltage" class="stat-sub"></span>
+      </div>
+
+      <div class="stat">
+        <span class="stat-label">Quelle</span>
+        <span id="source" class="stat-value">–</span>
+      </div>
+
+      <div class="stat">
+        <span class="stat-label">Letzte Messung</span>
+        <span id="last-ts" class="stat-value stat-ts">–</span>
+      </div>
+
+    </div>
+  </header>
+
+  <main class="main">
+
+    <section class="section">
+      <h2 class="section-heading">Sensoren</h2>
+      <div id="sensor-grid" class="sensor-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="charts-header">
+        <h2 class="section-heading">Verlauf</h2>
+        <div id="time-selector" class="time-selector" role="group" aria-label="Zeitspanne">
+          <button class="time-btn active" data-minutes="15">15 min</button>
+          <button class="time-btn" data-minutes="60">1 h</button>
+          <button class="time-btn" data-minutes="360">6 h</button>
+          <button class="time-btn" data-minutes="1440">24 h</button>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-box">
+          <p id="chart-moisture-title" class="chart-title">Bodenfeuchte – kein Sensor gewählt</p>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chart-moisture"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <p class="chart-title">Temperaturen</p>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chart-temp"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <p class="chart-title">Batterie</p>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chart-battery"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

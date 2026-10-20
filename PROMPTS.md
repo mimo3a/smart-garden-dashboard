@@ -175,14 +175,48 @@ Alle Tests ausführen.
 
 ## Prompt 7 – Dashboard
 ```
-Baue static/index.html, app.js und style.css: Dashboard mit Karten für aktuelle Werte
-(4× Bodenfeuchte, Lufttemperatur, Bodentemperatur, Batterie mit Balken), und Liniendiagrammen mit
-Chart.js für die letzte Stunde (Feuchte aller Kanäle; Luft- und Bodentemperatur; Batterie).
-Alle 2 Sekunden /api/latest pollen, Diagramme alle 10 Sekunden aktualisieren. Karten mit Alarm rot
-markieren. Kanal mit status "err" als "Sensorfehler" anzeigen. Werte nur per textContent einfügen.
-Responsive, funktioniert auch am Handy.
+Baue das Dashboard in static/index.html, app.js und style.css (Vanilla JS, Chart.js über CDN):
+1. Kopfzeile mit Lufttemperatur, Bodentemperatur und Batterie (Prozent + Balken, Spannung),
+   Datenquelle (simulator/uart) und Zeitpunkt der letzten Messung in lokaler Zeit.
+2. Kompaktes Raster mit einer Karte pro Sensor aus /api/config (16 Sensoren): Name, Feuchte in %
+   mit Balken. Kanal mit status "err" als "Sensorfehler" anzeigen, fehlender Kanal als "–".
+3. Diagramme für die gewählte Zeitspanne (Auswahl 15 min / 1 h / 6 h / 24 h, /api/history mit
+   max_points=300): Feuchte des ausgewählten Sensors (Klick auf eine Karte wählt ihn aus),
+   Luft- und Bodentemperatur, Batterie.
+4. /api/latest alle 2 s pollen, Diagramme alle 10 s aktualisieren. Solange /api/latest 404 liefert,
+   "Warte auf erste Messwerte …" anzeigen. Bei Verbindungsfehler einen Hinweis zeigen, nicht abstürzen.
+5. Alle Werte per textContent einfügen, nicht per innerHTML. Pfade passend zum StaticFiles-Mount.
+6. Responsive: am Handy 2 Karten pro Zeile, am Desktop 4–8.
+Starte die App danach nicht selbst dauerhaft; führe die Tests aus (inkl. des Tests für referenzierte
+Dateien) und nenne mir, was ich im Browser prüfen soll.
 ```
 **Prüfen:** Im Browser ansehen, Handy-Breite testen, kaputte Werte aus dem Simulator beobachten.
+
+## Folge-Prompt 7b:
+
+Browser-Test des Dashboards:
+1. Die Diagramme nutzen eine Kategorie-Achse: Messpunkte mit 9 min, 0 min und über 1 h Abstand stehen
+   gleich weit auseinander, und Lücken (App lief nicht) werden durch Linien überbrückt. Nutze eine
+   echte Zeitachse (proportional; z. B. lineare Achse mit Zeitstempeln und formatierten Ticks, damit
+   kein zusätzlicher Date-Adapter nötig ist) und unterbrich die Linie bei Lücken größer als das
+   Doppelte der Bucket-Breite (null-Werte, spanGaps: false).
+2. Feuchte- und Batterie-Diagramm mit fester y-Achse 0–100 %.
+3. Auf den Sensorkarten fehlt der Feuchte-Balken aus der Anforderung – ergänzen.
+4. Der Browser hat eine veraltete style.css aus dem Cache verwendet. Statische Dateien mit
+   Cache-Control: no-cache ausliefern (Revalidierung statt veralteter Kopie) und einen Test dafür.
+5. Diagrammhöhe über einen Wrapper-Container mit fester Höhe statt canvas { height … !important }.
+Alle Tests ausführen und mir sagen, was ich im Browser erneut prüfen soll.
+
+## Folge-Prompt 7c:
+
+Fehler in updateCharts (app.js): bucketMs = Zeitfenster / rows.length verwendet die Anzahl der Buckets
+MIT Daten, nicht die tatsächliche Bucket-Breite. Bei wenigen Punkten (App lief nur kurz) wird die
+Lückenschwelle riesig (z. B. 12 h bei 4 Punkten in 24 h) und Lücken werden wieder überbrückt.
+1. Bucket-Breite wie im Backend berechnen: floor(minutes*60 / max_points) + 1 Sekunden, max_points als
+   gemeinsame Konstante im JS. Lückenschwelle = 2 × Bucket-Breite.
+2. x-Achse auf das gewählte Zeitfenster festlegen (min = jetzt − Zeitfenster, max = jetzt), damit
+   "24 h" wirklich 24 Stunden zeigt.
+Führe die Tests aus und nenne mir, wie ich die Lücke im Browser sichtbar machen kann.
 
 ## Prompt 8 – Schwellwerte und Alarme
 ```

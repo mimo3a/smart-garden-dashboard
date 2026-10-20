@@ -1,1 +1,258 @@
-/* Smart Garden Dashboard – styles (to be implemented) */
+/* Smart Garden Dashboard – dark theme */
+
+:root {
+  --bg:        #111827;
+  --surface:   #1f2937;
+  --border:    #374151;
+  --text:      #f9fafb;
+  --muted:     #9ca3af;
+  --accent:    #34d399;
+  --warn:      #fbbf24;
+  --err:       #f87171;
+  --batt-ok:   #34d399;
+  --batt-mid:  #fbbf24;
+  --batt-low:  #f87171;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Status banner ─────────────────────────────────────────────────────────── */
+.status-banner {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9rem;
+  text-align: center;
+}
+.status-banner.hidden       { display: none; }
+.status-banner.banner-info  { background: #1e3a5f; color: #93c5fd; }
+.status-banner.banner-error { background: #3b1a1a; color: var(--err); }
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.site-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.site-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.header-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.stat-ts {
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* Battery bar */
+.batt-track {
+  height: 5px;
+  width: 80px;
+  background: var(--border);
+  border-radius: 3px;
+  margin-top: 3px;
+  overflow: hidden;
+}
+.batt-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background-color 0.4s ease;
+  background: var(--muted);
+}
+.batt-fill.batt-ok  { background: var(--batt-ok);  }
+.batt-fill.batt-mid { background: var(--batt-mid); }
+.batt-fill.batt-low { background: var(--batt-low); }
+
+/* ── Main layout ───────────────────────────────────────────────────────────── */
+.main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* ── Sensor grid ───────────────────────────────────────────────────────────── */
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+@media (min-width: 480px) { .sensor-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 800px) { .sensor-grid { grid-template-columns: repeat(8, 1fr); } }
+
+.sensor-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sensor-card:hover      { border-color: var(--accent); background: #253340; }
+.sensor-card.selected   { border-color: var(--accent); background: #1a3329; }
+.sensor-card.sensor-warn { border-color: var(--warn); }
+.sensor-card.sensor-err  { border-color: var(--err); opacity: 0.7; }
+
+.sensor-name {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sensor-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sensor-card.sensor-err .sensor-value {
+  font-size: 0.7rem;
+  color: var(--err);
+  font-weight: 400;
+}
+
+/* Moisture bar on sensor card */
+.sensor-bar-track {
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.sensor-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.4s ease, background-color 0.4s ease;
+  background: var(--muted);
+}
+
+.sensor-bar-fill.sensor-bar-ok   { background: var(--accent); }
+.sensor-bar-fill.sensor-bar-warn { background: var(--warn); }
+.sensor-bar-fill.sensor-bar-err  { background: var(--err); }
+
+/* ── Charts ────────────────────────────────────────────────────────────────── */
+.charts-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.time-selector {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.time-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.25rem 0.7rem;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.time-btn:hover  { border-color: var(--accent); color: var(--text); }
+.time-btn.active { border-color: var(--accent); color: var(--accent); background: #1a3329; }
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 800px) {
+  .charts-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.chart-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chart-title {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Fixed-height wrapper lets Chart.js fill available space via maintainAspectRatio: false */
+.chart-canvas-wrapper {
+  position: relative;
+  height: 180px;
+}
