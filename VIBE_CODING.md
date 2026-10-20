@@ -24,7 +24,8 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | 3 | Simulator | | | |
 | 4 | UART-Reader | Reconnect, Mocks, 76 Tests; Agent bemerkt Warnings selbst | Fix im falschen Layer (except: break) | … |
 | 4b | Folge-Prompt Reader-Robustheit | Ursache in Tests behoben, Callback isoliert, 77/77 | – | … |
-| | 5 | SQLite | Flaches Schema mit 48 Spalten, 107/107 Tests | Veralteter Prompt aus PROMPTS.md verwendet → Folge-Prompt 5b | … |
+| 5 | SQLite | Flaches Schema mit 48 Spalten, 107/107 Tests | Veralteter Prompt aus PROMPTS.md verwendet → Folge-Prompt 5b | … |
+| 5b | Folge-Prompt Normalisierung | 2 Tabellen + FK/CASCADE, JOIN, Purge, eingefrorene Zeit für Grenztest, 120/120 | – | … |
 | 6 | REST-API | | | |
 | 7 | Dashboard | | | |
 | 8 | Alarme | | | |
@@ -50,6 +51,8 @@ Agent „behebt” Test-Artefakt (Mock-StopIteration) im Produktivcode mit excep
 
 
 Догадка вместо проверки. Про AGENTS.md агент написал «Vermutlich ähnliche Anweisungen», то есть не открыл файл и угадал. На деле файл идентичен CLAUDE.md. Мелкий, но наглядный пример того, что LLM уверенно додумывает вместо того, чтобы прочитать. Это для раздела 7, тип «Halluzination / Annahme».
+
+Unbekanntes Paket vom Agenten installiert → gegen offizielle Doku geprüft → legitim.
 
 
 ## 8. Test mit echter Hardware

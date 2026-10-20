@@ -145,15 +145,33 @@ oder ändern, dass er wirklich die Grenze prüft. Alle Tests ausführen.
 
 ## Prompt 6 – REST-API
 ```
-Implementiere in app/main.py die FastAPI-App mit:
-GET /api/latest – letzte Messung inkl. aktiver Alarme
-GET /api/history?minutes=60 – Messungen der letzten N Minuten (N zwischen 1 und 1440 validieren)
-GET /api/config – Schwellwerte
-CLI: --simulate | --port COMx --baud 115200, --db pfad. Beim Start DB initialisieren und die gewählte
-Datenquelle als Hintergrund-Thread starten. Statische Dateien aus static/ unter / ausliefern.
-API-Tests mit FastAPIs TestClient.
+Implementiere app/main.py mit FastAPI:
+GET /api/latest – letzte Messung inkl. Kanälen
+GET /api/history?minutes=60&max_points=300 – Messungen der letzten N Minuten (N zwischen 1 und 1440,
+    max_points zwischen 10 und 1000 validieren). Bei mehr Messungen als max_points in Zeit-Buckets
+    mitteln (in SQL aggregieren, nicht alle Rohzeilen nach Python laden). Ergebnis pro Bucket:
+    ts, air_temp_c, soil_temp_c, battery_percent und moisture_pct je (dev, ch).
+GET /api/config – Sensorliste und Schwellwerte aus config.json
+CLI: --port COMx --baud 115200, --simulate, --db pfad, --keep-days 7. Ohne --port startet die App
+automatisch im Simulator-Modus. Beim Start init_db und purge_older_than(keep_days) aufrufen, dann die
+Datenquelle als Hintergrund-Thread starten (Callback = insert_reading mit source "uart" bzw.
+"simulator") und beim Herunterfahren sauber stoppen (FastAPI lifespan). Statische Dateien aus
+static/ unter / ausliefern, sodass http://127.0.0.1:8000 die index.html zeigt.
+Start mit: python -m app.main. API-Tests mit FastAPIs TestClient. Alle Tests ausführen.
 ```
 **Prüfen:** `python -m app.main --simulate` starten, `/docs` öffnen, Endpunkte manuell testen.
+
+## Folge-Prompt 6b:
+
+Review von main.py und test_main.py:
+1. uvicorn läuft auf host="0.0.0.0" – das Dashboard ohne Login wäre im ganzen Netzwerk erreichbar.
+   Default 127.0.0.1, neues CLI-Argument --host für bewusstes Freigeben.
+2. index.html verweist auf /static/style.css und /static/app.js, StaticFiles ist aber unter "/"
+   gemountet → diese Pfade liefern 404. Behebe das konsistent und ergänze einen Test, der index.html
+   lädt und prüft, dass jede darin referenzierte CSS/JS-Datei mit 200 ausgeliefert wird.
+3. test_bucket_averages_temperature ist immer grün (akzeptiert 10, 15 oder 20). Mit eingefrorener
+   Zeit (_utcnow per monkeypatch) zwei Readings sicher in denselben Bucket legen und exakt 15.0 prüfen.
+Alle Tests ausführen.
 
 ## Prompt 7 – Dashboard
 ```

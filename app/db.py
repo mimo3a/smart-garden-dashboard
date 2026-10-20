@@ -181,6 +181,97 @@ def readings_since(minutes: int) -> list[dict]:
         conn.close()
 
 
+def history_buckets(minutes: int, max_points: int) -> list[dict]:
+    """Return time-bucketed aggregated readings for the last *minutes* minutes.
+
+    Splits the window into at most *max_points* even buckets and AVGs values
+    per bucket entirely in SQL (no raw rows loaded into Python).
+
+    Bucket numbering is relative to the cutoff epoch so that a window of
+    T = minutes*60 seconds with bucket width b = T//max_points + 1 seconds
+    always produces at most max_points buckets (proof: floor(T/b) ≤ N-1).
+
+    Each entry: ts, air_temp_c, soil_temp_c, battery_percent,
+    channels (list of {dev, ch, moisture_pct}).
+    """
+    now = _utcnow()
+    cutoff_dt = now - timedelta(minutes=minutes)
+    cutoff = cutoff_dt.isoformat()
+    # Integer epoch of the cutoff; bucket indices are relative to this origin
+    # so the entire window [0, T) maps to buckets [0, max_points).
+    cutoff_epoch = int(cutoff_dt.timestamp())
+    # b = T//N + 1 guarantees at most N buckets for any span ≤ T seconds.
+    bucket_secs = (minutes * 60) // max_points + 1
+
+    params = {"b": bucket_secs, "cutoff": cutoff, "ce": cutoff_epoch}
+
+    conn = _connect(_DB_PATH)
+    try:
+        # ── reading-level aggregates ──────────────────────────────────────
+        reading_rows = conn.execute(
+            """
+            SELECT
+                CAST((CAST(strftime('%s', ts) AS INTEGER) - :ce) / :b AS INTEGER) AS bucket,
+                MIN(ts)              AS ts,
+                AVG(air_temp_c)      AS air_temp_c,
+                AVG(soil_temp_c)     AS soil_temp_c,
+                AVG(battery_percent) AS battery_percent
+            FROM readings
+            WHERE ts >= :cutoff
+              AND strftime('%s', ts) IS NOT NULL
+            GROUP BY bucket
+            ORDER BY bucket ASC
+            """,
+            params,
+        ).fetchall()
+
+        if not reading_rows:
+            return []
+
+        # ── channel-level aggregates (JOIN avoids a second trip per bucket) ─
+        channel_rows = conn.execute(
+            """
+            SELECT
+                CAST((CAST(strftime('%s', r.ts) AS INTEGER) - :ce) / :b AS INTEGER) AS bucket,
+                cv.dev,
+                cv.ch,
+                AVG(cv.moisture_pct) AS moisture_pct
+            FROM readings r
+            JOIN channel_values cv ON cv.reading_id = r.id
+            WHERE r.ts >= :cutoff
+              AND strftime('%s', r.ts) IS NOT NULL
+              AND cv.status = 'ok'
+              AND cv.moisture_pct IS NOT NULL
+            GROUP BY bucket, cv.dev, cv.ch
+            ORDER BY bucket ASC, cv.dev ASC, cv.ch ASC
+            """,
+            params,
+        ).fetchall()
+
+        # ── merge ─────────────────────────────────────────────────────────
+        buckets: dict[int, dict] = {}
+        for row in reading_rows:
+            buckets[row["bucket"]] = {
+                "ts": row["ts"],
+                "air_temp_c": row["air_temp_c"],
+                "soil_temp_c": row["soil_temp_c"],
+                "battery_percent": row["battery_percent"],
+                "channels": [],
+            }
+        for row in channel_rows:
+            b = buckets.get(row["bucket"])
+            if b is not None:
+                b["channels"].append({
+                    "dev": row["dev"],
+                    "ch": row["ch"],
+                    "moisture_pct": row["moisture_pct"],
+                })
+
+        return list(buckets.values())
+    finally:
+        conn.close()
+
+
 def purge_older_than(days: int) -> int:
     """Delete readings (and their channels via CASCADE) older than *days* days.
 
