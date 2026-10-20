@@ -30,3 +30,5 @@ Thumbs.db
 .env
 docs/raw/
 docs/raw/
+*.db-wal
+*.db-shm

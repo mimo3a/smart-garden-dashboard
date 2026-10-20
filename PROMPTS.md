@@ -127,6 +127,22 @@ Tests mit einer temporären Datenbank.
 ```
 **Prüfen:** Parametrisierte Queries? Thread-Sicherheit wirklich gelöst oder nur behauptet?
 
+## Folge-Prompt 5b:
+
+Das Schema in db.py ist flach (48 Spalten moisture_ch0..15 usw.) und verwirft Kanäle außerhalb von
+dev*4+ch < 16 stillschweigend – der Parser übernimmt solche Kanäle aber. Bitte normalisieren:
+1. Tabelle readings (id, ts, source, air_temp_c, soil_temp_c, battery_voltage, battery_percent)
+   und Tabelle channel_values (reading_id, dev, ch, raw, status, moisture_pct) mit
+   FOREIGN KEY ... ON DELETE CASCADE, PRIMARY KEY (reading_id, dev, ch), PRAGMA foreign_keys=ON.
+   Index auf readings(ts) und channel_values(reading_id).
+2. insert_reading speichert alle Kanäle des Readings in einer Transaktion, ohne Index-Mapping.
+3. latest_reading und readings_since liefern pro Reading ein dict mit "channels": [ {dev, ch, raw,
+   status, moisture_pct}, ... ]. readings_since ohne N+1-Queries (ein JOIN oder zwei Queries).
+4. Neue Funktion purge_older_than(days) zum Aufräumen alter Daten.
+Thread-Sicherheit (WAL + Lock, Connection pro Aufruf) beibehalten. Tests anpassen, einen Test für
+einen Kanal mit dev=7 ergänzen (muss gespeichert werden) und test_boundary_included so umbenennen
+oder ändern, dass er wirklich die Grenze prüft. Alle Tests ausführen.
+
 ## Prompt 6 – REST-API
 ```
 Implementiere in app/main.py die FastAPI-App mit:

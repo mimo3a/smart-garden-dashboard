@@ -24,7 +24,7 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | 3 | Simulator | | | |
 | 4 | UART-Reader | Reconnect, Mocks, 76 Tests; Agent bemerkt Warnings selbst | Fix im falschen Layer (except: break) | … |
 | 4b | Folge-Prompt Reader-Robustheit | Ursache in Tests behoben, Callback isoliert, 77/77 | – | … |
-| 5 | SQLite | | | |
+| | 5 | SQLite | Flaches Schema mit 48 Spalten, 107/107 Tests | Veralteter Prompt aus PROMPTS.md verwendet → Folge-Prompt 5b | … |
 | 6 | REST-API | | | |
 | 7 | Dashboard | | | |
 | 8 | Alarme | | | |
