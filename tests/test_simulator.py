@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import threading
 from itertools import islice
 
 import pytest
 
+from app.models import Reading
 from app.parser import _moisture_pct, parse_line
-from app.simulator import _moisture_to_raw, simulate
+from app.simulator import DemoSimulatorReader, SimulatorReader, _moisture_to_raw, simulate
 
 # Use interval=0 everywhere so tests don't actually sleep.
 # Fixed seed=0 makes every run deterministic.
@@ -168,3 +170,53 @@ class TestMoistureToRaw:
             raw = _moisture_to_raw(pct, self.DRY, self.WET)
             recovered = _moisture_pct(raw, self.DRY, self.WET)
             assert recovered == pytest.approx(pct, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Background-thread readers (M7)
+# ---------------------------------------------------------------------------
+
+def _collect_one(reader_cls):
+    """Start *reader_cls*, block until first Reading arrives, stop, return list."""
+    received: list[Reading] = []
+    first = threading.Event()
+
+    def cb(r: Reading) -> None:
+        received.append(r)
+        first.set()
+
+    reader = reader_cls()
+    reader.start(cb)
+    first.wait(timeout=5)
+    reader.stop()
+    return received
+
+
+class TestSimulatorReader:
+    def test_start_delivers_at_least_one_reading(self):
+        assert len(_collect_one(SimulatorReader)) >= 1
+
+    def test_callback_receives_reading_instances(self):
+        assert all(isinstance(r, Reading) for r in _collect_one(SimulatorReader))
+
+    def test_stop_terminates_thread(self):
+        reader = SimulatorReader()
+        reader.start(lambda r: None)
+        reader.stop()
+        assert reader._thread is not None
+        assert not reader._thread.is_alive()
+
+
+class TestDemoSimulatorReader:
+    def test_start_delivers_at_least_one_reading(self):
+        assert len(_collect_one(DemoSimulatorReader)) >= 1
+
+    def test_callback_receives_reading_instances(self):
+        assert all(isinstance(r, Reading) for r in _collect_one(DemoSimulatorReader))
+
+    def test_stop_terminates_thread(self):
+        reader = DemoSimulatorReader()
+        reader.start(lambda r: None)
+        reader.stop()
+        assert reader._thread is not None
+        assert not reader._thread.is_alive()

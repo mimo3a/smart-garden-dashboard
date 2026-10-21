@@ -46,6 +46,7 @@ def client(tmp_path, monkeypatch):
         db=str(db_path),
         keep_days=30,
         simulate=True,
+        demo=False,
         port=None,
         baud=115200,
         host="127.0.0.1",
@@ -69,6 +70,7 @@ def frozen_client(tmp_path, monkeypatch):
         db=str(db_path),
         keep_days=30,
         simulate=True,
+        demo=False,
         port=None,
         baud=115200,
         host="127.0.0.1",
@@ -477,3 +479,47 @@ class TestRowToReading:
     def test_empty_channels_list(self):
         row = {"ts": "2025-01-01T12:00:00+00:00", "channels": []}
         assert _row_to_reading(row).channels == []
+
+
+# ---------------------------------------------------------------------------
+# Lifespan: correct reader type selected
+# ---------------------------------------------------------------------------
+
+class TestLifespan:
+    def test_demo_flag_starts_demo_reader(self, tmp_path, monkeypatch):
+        """When demo=True the lifespan must instantiate DemoSimulatorReader."""
+        db_path = tmp_path / "demo.db"
+        created: list[str] = []
+
+        class _TrackingNull(NullDataSource):
+            def __init__(self):
+                created.append("DemoSimulatorReader")
+
+        monkeypatch.setattr(main_module, "_args", argparse.Namespace(
+            db=str(db_path), keep_days=30, simulate=False, demo=True,
+            port=None, baud=115200, host="127.0.0.1",
+        ))
+        monkeypatch.setattr(main_module, "DemoSimulatorReader", _TrackingNull)
+        init_db(db_path)
+        with TestClient(main_module.app):
+            pass
+        assert created == ["DemoSimulatorReader"]
+
+    def test_simulate_flag_starts_simulator_reader(self, tmp_path, monkeypatch):
+        """When demo=False and simulate=True the lifespan uses SimulatorReader."""
+        db_path = tmp_path / "sim.db"
+        created: list[str] = []
+
+        class _TrackingNull(NullDataSource):
+            def __init__(self):
+                created.append("SimulatorReader")
+
+        monkeypatch.setattr(main_module, "_args", argparse.Namespace(
+            db=str(db_path), keep_days=30, simulate=True, demo=False,
+            port=None, baud=115200, host="127.0.0.1",
+        ))
+        monkeypatch.setattr(main_module, "SimulatorReader", _TrackingNull)
+        init_db(db_path)
+        with TestClient(main_module.app):
+            pass
+        assert created == ["SimulatorReader"]

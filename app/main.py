@@ -112,7 +112,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     init_db(Path(_args.db))
     purge_older_than(_args.keep_days)
 
-    use_demo: bool = getattr(_args, "demo", False)
+    use_demo: bool = _args.demo
     use_simulator: bool = use_demo or _args.simulate or not _args.port
 
     if use_demo:

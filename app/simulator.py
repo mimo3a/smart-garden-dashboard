@@ -207,46 +207,45 @@ def simulate_demo(interval: float = 1.0, seed: Optional[int] = None) -> Iterator
 
 
 # ---------------------------------------------------------------------------
-# SimulatorReader — same DataSource interface as SerialReader
+# _BaseSimulatorReader — shared background-thread logic
 # ---------------------------------------------------------------------------
 
-class SimulatorReader(DataSource):
-    """Wraps the simulate() generator in a background thread.
+class _BaseSimulatorReader(DataSource):
+    """Common start/stop/run logic for simulator-based readers.
 
-    Inherits the same DataSource interface as SerialReader so main.py can
-    treat both sources identically::
-
-        source = SimulatorReader()          # or SerialReader(port, baud)
-        source.start(on_reading)
-        ...
-        source.stop()
+    Subclasses supply the line source by overriding ``_generator()``.
     """
+
+    _thread_name: str = "simulator"
 
     def __init__(self) -> None:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
+    def _generator(self) -> Iterator[str]:
+        raise NotImplementedError
+
     def start(self, callback: Callable[[Reading], None]) -> None:
-        """Start the simulator thread and deliver readings to *callback*."""
+        """Start the background thread and deliver readings to *callback*."""
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run,
             args=(callback,),
             daemon=True,
-            name="simulator",
+            name=self._thread_name,
         )
         self._thread.start()
-        logger.info("SimulatorReader started")
+        logger.info("%s started", type(self).__name__)
 
     def stop(self) -> None:
-        """Signal the simulator thread to stop and block until it finishes."""
+        """Signal the thread to stop and block until it finishes."""
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=2)
-        logger.info("SimulatorReader stopped")
+        logger.info("%s stopped", type(self).__name__)
 
     def _run(self, callback: Callable[[Reading], None]) -> None:
-        for line in simulate(interval=0):
+        for line in self._generator():
             if self._stop_event.is_set():
                 break
             reading = parse_line(line)
@@ -258,45 +257,39 @@ class SimulatorReader(DataSource):
 
 
 # ---------------------------------------------------------------------------
+# SimulatorReader — realistic random-walk data
+# ---------------------------------------------------------------------------
+
+class SimulatorReader(_BaseSimulatorReader):
+    """Wraps the simulate() generator in a background thread.
+
+    Inherits the same DataSource interface as SerialReader so main.py can
+    treat both sources identically::
+
+        source = SimulatorReader()          # or SerialReader(port, baud)
+        source.start(on_reading)
+        ...
+        source.stop()
+    """
+
+    _thread_name = "simulator"
+
+    def _generator(self) -> Iterator[str]:
+        return simulate(interval=0)
+
+
+# ---------------------------------------------------------------------------
 # DemoSimulatorReader — cycles through alarm scenarios
 # ---------------------------------------------------------------------------
 
-class DemoSimulatorReader(DataSource):
+class DemoSimulatorReader(_BaseSimulatorReader):
     """Wraps simulate_demo() in a background thread for --demo mode.
 
     Cycles through all alarm scenarios so every alert type becomes visible
     in the dashboard within ~2.5 minutes.
     """
 
-    def __init__(self) -> None:
-        self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+    _thread_name = "demo-simulator"
 
-    def start(self, callback: Callable[[Reading], None]) -> None:
-        """Start the demo thread and deliver readings to *callback*."""
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run,
-            args=(callback,),
-            daemon=True,
-            name="demo-simulator",
-        )
-        self._thread.start()
-        logger.info("DemoSimulatorReader started")
-
-    def stop(self) -> None:
-        """Signal the demo thread to stop and block until it finishes."""
-        self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2)
-        logger.info("DemoSimulatorReader stopped")
-
-    def _run(self, callback: Callable[[Reading], None]) -> None:
-        for line in simulate_demo(interval=0):
-            if self._stop_event.is_set():
-                break
-            reading = parse_line(line)
-            if reading is not None:
-                callback(reading)
-            if self._stop_event.wait(1.0):
-                break
+    def _generator(self) -> Iterator[str]:
+        return simulate_demo(interval=0)

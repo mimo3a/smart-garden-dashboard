@@ -138,7 +138,7 @@ class TestSensorErrorAlerts:
         ch = AdcChannel(dev=3, ch=3, raw=0, status="err", moisture_pct=None)
         a = next(x for x in check_alerts(make_reading(channels=[ch]), _CONFIG)
                  if x["type"] == "sensor_error")
-        assert "3:3" in a["message"] or "Sensor" in a["message"]
+        assert a["message"] == "Sensorfehler: Sensor 3:3"
 
 
 # ---------------------------------------------------------------------------

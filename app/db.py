@@ -14,7 +14,8 @@ _DB_PATH: Path = Path("garden.db")
 _write_lock = threading.Lock()
 
 # Replaceable in tests via monkeypatch to freeze time.
-_utcnow = lambda: datetime.now(tz=timezone.utc)  # noqa: E731
+def _utcnow() -> datetime:
+    return datetime.now(tz=timezone.utc)
 
 
 _CREATE_READINGS = """

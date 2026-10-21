@@ -272,6 +272,18 @@ Behebe aus dem Review:
 3. M5: _row_to_reading mit .get() robust machen und testen (korrupte Kanäle, ungültiger ts).
 Alle Tests ausführen.
 
+## Folge-Prompt 9c 
+
+Behebe aus dem Review:
+1. M2: Gemeinsame Basisklasse für SimulatorReader und DemoSimulatorReader (nur der Generator
+   unterscheidet sich).
+2. M7 + M8: Tests für DemoSimulatorReader (start/stop, Callback) und dass lifespan bei demo=True
+   einen DemoSimulatorReader startet.
+3. N1 (def statt lambda), N4 (demo=False im Test-Namespace).
+4. Zusätzlicher Fund: test_unknown_sensor_has_fallback_name prüft mit "or" und ist damit zu
+   schwach. Exakte erwartete Meldung prüfen.
+Alle Tests ausführen.
+
 ## Prompt 10 – README
 ```
 Schreibe README.md: Projektbeschreibung, Screenshot-Platzhalter, Installation, Start mit Simulator und
