@@ -5,22 +5,24 @@ Die zugehörige Hardware ist ein STM32 Nucleo-L476RG mit FreeRTOS, der bis zu 16
 Bodenfeuchte-Sensoren (4 × ADS1115 ADC, je 4 Kanäle) sowie Luft-/Bodentemperatur und
 Batteriespannung als JSON-Zeilen über UART sendet.
 
-Dieses Repository ist das Ergebnis einer **Vibe-Coding-Hausübung**: Der Anwendungscode und die
-Tests wurden per Vibe Coding mit Claude Code erzeugt. Kontextdatei (AGENTS.md/CLAUDE.md),
-Prompt-Plan (PROMPTS.md), Berichtsvorlage und das Skript `tools/jsonl_to_md.py` wurden vorab mit
-Hilfe eines KI-Chats vorbereitet; einzelne Zeilen (z. B. in `.gitignore` und `CLAUDE.md`) wurden
-manuell ergänzt. Die verwendeten Prompts und ein Erfahrungsbericht stehen in
-[`PROMPTS.md`](PROMPTS.md) und [`VIBE_CODING.md`](VIBE_CODING.md).
+Dieses Repository ist das Ergebnis einer **Vibe-Coding-Hausübung**: Der Anwendungscode und die Tests
+wurden per Vibe Coding mit Claude Code erzeugt. Kontextdatei (`AGENTS.md`/`CLAUDE.md`), Prompt-Plan
+(`PROMPTS.md`), Berichtsvorlage und das Skript `tools/jsonl_to_md.py` wurden vorab mit Hilfe eines
+KI-Chats vorbereitet; einzelne Zeilen (beispielsweise in `.gitignore` und `CLAUDE.md`) wurden manuell
+ergänzt. Die verwendeten Prompts und der Erfahrungsbericht stehen in [`PROMPTS.md`](PROMPTS.md) und
+[`VIBE_CODING.md`](VIBE_CODING.md).
 
-![Dashboard Screenshot](docs/screenshot.png)
+**Autor:** Oleksandr Demianov ([@mimo3a](https://github.com/mimo3a))
+
+![Dashboard im Demo-Modus](docs/screenshot.png)
 
 ---
 
 ## Voraussetzungen
 
-| Anforderung | Mindestversion |
+| Anforderung | Version |
 |---|---|
-| Python | 3.11 (getestet mit 3.14; ab 3.11 vorgesehen, aber nicht auf älteren Versionen geprüft) |
+| Python | getestet mit 3.14; ab 3.11 vorgesehen, aber nicht auf älteren Versionen geprüft |
 | pip | beliebig (im venv enthalten) |
 | Internet | nur für Chart.js (CDN, kein lokales Bundle) |
 
@@ -35,7 +37,7 @@ Ohne Internetverbindung werden die Diagramme nicht gerendert; alle anderen Funkt
 
 ```powershell
 # 1. Repository klonen
-git clone https://github.com/mimo3a/smart-garden-dashboard.git smart-garden-dashboard
+git clone https://github.com/mimo3a/smart-garden-dashboard.git
 cd smart-garden-dashboard
 
 # 2. Virtuelle Umgebung anlegen und Abhängigkeiten installieren
@@ -50,11 +52,14 @@ python -m app.main
 start http://127.0.0.1:8000
 ```
 
+Falls PowerShell das Aktivieren der virtuellen Umgebung blockiert, einmalig ausführen:
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
 ### Linux / macOS
 
 ```bash
 # 1. Repository klonen
-git clone https://github.com/mimo3a/smart-garden-dashboard.git smart-garden-dashboard
+git clone https://github.com/mimo3a/smart-garden-dashboard.git
 cd smart-garden-dashboard
 
 # 2. Virtuelle Umgebung anlegen und Abhängigkeiten installieren
@@ -75,11 +80,11 @@ open http://127.0.0.1:8000        # macOS
 | Befehl | Beschreibung |
 |---|---|
 | `python -m app.main` | Simulator-Modus (keine Hardware erforderlich) |
-| `python -m app.main --demo` | Demo-Modus: durchläuft alle 7 Alarm-Szenarien (~3 min/Zyklus) |
-| `python -m app.main --port COM5` | UART-Modus, Windows (z. B. COM5) |
+| `python -m app.main --demo` | **Demo-Modus:** durchläuft alle 7 Alarm-Szenarien (ca. 3 min pro Zyklus) – empfohlen für die Vorführung |
+| `python -m app.main --port COM5` | UART-Modus, Windows (beispielsweise COM5) |
 | `python -m app.main --port /dev/ttyACM0` | UART-Modus, Linux |
 | `python -m app.main --port COM5 --baud 115200` | UART mit expliziter Baudrate (Standard: 115200) |
-| `python -m app.main --host 0.0.0.0` | Im Netzwerk erreichbar (alle Interfaces) |
+| `python -m app.main --host 0.0.0.0` | Im Netzwerk erreichbar (alle Interfaces, ohne Authentifizierung) |
 | `python -m app.main --db mein-garten.db` | Abweichender Datenbankpfad (Standard: `garden.db`) |
 | `python -m app.main --keep-days 14` | Ältere Messwerte beim Start löschen (Standard: 7 Tage) |
 
@@ -115,27 +120,29 @@ Die Platine sendet pro Messung eine JSON-Zeile über UART (115200 Baud, `\n`-ter
 | `battery.voltage` | float | Batteriespannung in V (optional) |
 | `battery.percent` | float 0–100 | Ladestand in % (optional) |
 
-Zeilen, die kein gültiges JSON enthalten (z. B. Bootmeldungen wie `USART1 PA9 OK`),
-werden verworfen und stürzen die App nicht ab.
+Zeilen, die kein gültiges JSON enthalten (beispielsweise Bootmeldungen wie `USART1 PA9 OK`),
+werden verworfen und bringen die App nicht zum Absturz. Doppelte `(dev, ch)`-Einträge in einer Zeile
+werden erkannt; der letzte Eintrag wird übernommen und eine Warnung geloggt.
 
-Die Feuchte-Umrechnung erfolgt linear pro (dev, ch) aus `config.json`:
+Die Feuchte-Umrechnung erfolgt linear pro `(dev, ch)` aus `config.json`:
 
 ```
 moisture_pct = (dry_raw − raw) / (dry_raw − wet_raw) × 100
 ```
 
-Ergebnis wird auf 0–100 % geklemmt. Unbekannte (dev, ch)-Kombinationen liefern `moisture_pct = null`.
+Das Ergebnis wird auf 0–100 % begrenzt. Unbekannte `(dev, ch)`-Kombinationen liefern `moisture_pct = null`.
 
 ---
 
 ## REST-API
 
 Alle Endpunkte liefern JSON. Die statischen Dateien (`/`, `/app.js`, `/style.css`) werden
-unter derselben Adresse ausgeliefert; API-Routen haben immer Vorrang.
+unter derselben Adresse ausgeliefert; API-Routen haben immer Vorrang. Eine interaktive
+API-Dokumentation ist unter `http://127.0.0.1:8000/docs` erreichbar.
 
 ### `GET /api/latest`
 
-Letzte Messung mit allen Kanälen und aktiven Alarmen.  
+Letzte Messung mit allen Kanälen und aktiven Alarmen.
 Gibt `404` zurück, solange noch keine Messung vorliegt.
 
 ```json
@@ -164,9 +171,9 @@ Gibt `404` zurück, solange noch keine Messung vorliegt.
 
 ### `GET /api/history?minutes=60&max_points=300`
 
-Zeitlich gebuckelte Messwerte der letzten `minutes` Minuten (1–1440).
-Enthält mehr Punkte als `max_points` (10–1000), wird in SQL gemittelt.
-Kanäle mit `status = "err"` werden in den Bucket-Mittelwerten nicht berücksichtigt.
+Messwerte der letzten `minutes` Minuten (1–1440), zusammengefasst in Zeit-Buckets.
+Enthält das Zeitfenster mehr Messungen als `max_points` (10–1000), wird direkt in SQL gemittelt.
+Kanäle mit `status = "err"` werden in den Mittelwerten nicht berücksichtigt.
 
 ```json
 [
@@ -184,15 +191,15 @@ Kanäle mit `status = "err"` werden in den Bucket-Mittelwerten nicht berücksich
 
 ### `GET /api/config`
 
-Aktuelle Kalibrierung und Schwellwerte aus `config.json`.  
+Aktuelle Kalibrierung und Schwellwerte aus `config.json`.
 Gibt `500` zurück, wenn die Datei nicht gelesen werden kann.
 
 ---
 
 ## Alarmregeln
 
-Alarme werden bei jedem Aufruf von `/api/latest` live aus `config.json` berechnet.
-Der Grenzwert selbst löst **keinen** Alarm aus (strikt `<` bzw. `>`).
+Alarme werden bei jedem Aufruf von `/api/latest` aus der letzten Messung und `config.json` berechnet.
+Der Grenzwert selbst löst **keinen** Alarm aus (strikt `<` beziehungsweise `>`).
 Fehlende Werte (`null`) erzeugen ebenfalls keinen Alarm.
 
 | Typ | Auslöser | Schwere |
@@ -204,6 +211,9 @@ Fehlende Werte (`null`) erzeugen ebenfalls keinen Alarm.
 | `soil_temp_low` | Bodentemperatur < `soil_temp_min_c` | warning |
 | `soil_temp_high` | Bodentemperatur > `soil_temp_max_c` | warning |
 | `battery_low` | Ladestand < `battery_min_percent` | warning |
+
+Im Dashboard werden gleichartige Sensor-Alarme in der Alarmleiste zusammengefasst
+(beispielsweise „Bodenfeuchte zu niedrig: Beet 1, Beet 2 … (16)"); die betroffenen Karten werden einzeln markiert.
 
 ---
 
@@ -225,9 +235,30 @@ Fehlende Werte (`null`) erzeugen ebenfalls keinen Alarm.
 }
 ```
 
-Die Datei wird im laufenden Betrieb bei jeder Änderung (mtime) automatisch neu geladen.
-Tritt beim Laden ein Fehler auf, behält das Backend den zuletzt gültigen Stand und versucht
-es beim nächsten Aufruf erneut.
+Die Datei wird an einer zentralen Stelle (`app/config.py`) geladen und im laufenden Betrieb bei jeder
+Änderung (mtime) automatisch neu eingelesen. Tritt beim Laden ein Fehler auf, behält das Backend den
+zuletzt gültigen Stand und versucht es beim nächsten Aufruf erneut.
+
+---
+
+## Projektstruktur
+
+```
+app/
+  main.py          # FastAPI-App, CLI-Argumente, Lifespan, API-Endpunkte
+  config.py        # zentrales Laden von config.json mit Cache
+  parser.py        # JSON-Zeile → Reading (Validierung)
+  models.py        # Pydantic-Modelle
+  serial_reader.py # UART-Hintergrund-Thread mit Reconnect
+  simulator.py     # Simulator und Demo-Modus
+  db.py            # SQLite-Zugriff (readings + channel_values)
+  alerts.py        # Schwellwerte prüfen
+static/            # index.html, app.js, style.css
+tests/             # pytest-Tests
+tools/             # jsonl_to_md.py (Sitzungsprotokolle umwandeln)
+docs/              # Sitzungsprotokolle und Screenshot
+config.json        # Sensoren, Kalibrierung, Schwellwerte
+```
 
 ---
 
@@ -245,27 +276,28 @@ source .venv/bin/activate
 pytest -q
 ```
 
-Alle Tests laufen ohne laufenden Server und ohne physische Hardware; die Datenbank wird als
+Alle 242 Tests laufen ohne laufenden Server und ohne physische Hardware; die Datenbank wird als
 temporäre SQLite-Datei im vom Test-Framework bereitgestellten `tmp_path` angelegt.
 
 ---
 
 ## Bekannte Grenzen
 
-- **Zeitachsen-Beschriftung:** Chart.js zeigt bei breiten Zeitfenstern (≥ 6 h) nur 2–3 Tick-Labels,
-  was auf sehr kleinen Bildschirmen unübersichtlich wirken kann.
+- **Zeitachsen-Beschriftung:** Die Diagramme zeigen häufig nur 2–3 Beschriftungen auf der Zeitachse.
 - **Simulator-Zustand nach Neustart:** Der Simulator startet mit zufälligem Anfangszustand
-  (Feuchte, Temperatur, Batterieladestand) und weicht daher von einem vorherigen Lauf ab.
+  (Feuchte, Temperatur, Batterieladestand); nach einem Neustart entstehen daher Sprünge in den Verläufen.
 - **Frontend ohne automatisierte Tests:** Die JavaScript-Logik (Diagramme, Alarmleiste,
-  Sensor-Karten) wird ausschließlich manuell im Browser getestet.
-- **Chart.js benötigt Internet:** Die Diagrammbibliothek wird von einem CDN geladen;
-  ohne Netzverbindung bleibt der Diagramm-Bereich leer.
-- **Teilweise doppelte Test-Helfer:** `make_reading` ist in `test_alerts.py` und
-  `test_main.py` unabhängig voneinander definiert; eine gemeinsame `conftest.py`-Fixture
-  würde Duplikationen vermeiden.
-- **Alarme werden nicht zwischengespeichert:** `/api/latest` berechnet Alarme bei jedem
-  Aufruf neu aus der Datenbank und `config.json`; bei sehr häufigen Polls (< 1 s)
-  und großen Sensor-Arrays kann das messbar werden.
+  Sensor-Karten) wurde ausschließlich manuell im Browser getestet.
+- **Chart.js benötigt Internet:** Die Diagrammbibliothek wird von einem CDN geladen; ohne
+  Netzverbindung bleibt der Diagramm-Bereich leer.
+- **Teilweise doppelte Tests und Test-Helfer:** `make_reading` ist in mehreren Testdateien
+  (`test_db.py`, `test_main.py`, `test_alerts.py`) definiert, und Tests für den `SimulatorReader`
+  existieren sowohl in `test_serial_reader.py` als auch in `test_simulator.py`.
+- **Alarme werden nicht zwischengespeichert:** `/api/latest` berechnet die Alarme bei jedem Aufruf neu.
+- **Keine Authentifizierung:** Das Dashboard ist für den lokalen Betrieb gedacht (`127.0.0.1`).
+  Mit `--host 0.0.0.0` ist es ohne Login im Netzwerk erreichbar.
+- **Hardware-Test:** Das Datenformat wurde mit der Entwicklungsplatine abgeglichen; ein Ende-zu-Ende-Test
+  mit beschalteten Sensoren steht noch aus.
 
 ---
 
@@ -273,7 +305,9 @@ temporäre SQLite-Datei im vom Test-Framework bereitgestellten `tmp_path` angele
 
 | Datei | Inhalt |
 |---|---|
-| [`PROMPTS.md`](PROMPTS.md) | Alle verwendeten Prompts (Aufgaben 1–8 + Review) |
 | [`VIBE_CODING.md`](VIBE_CODING.md) | Erfahrungsbericht zum Vibe-Coding-Prozess |
-| [`docs/claude-session-1.md`](docs/claude-session-1.md) | Sitzungsprotokoll Session 1 (Prompts 1–4) |
-| [`docs/claude-session-2.md`](docs/claude-session-2.md) | Sitzungsprotokoll Session 2 (Prompts 5–7) |
+| [`PROMPTS.md`](PROMPTS.md) | Alle verwendeten Prompts (Prompts 0–10 inklusive 13 Folge-Prompts) |
+| [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) | Kontextdatei für den Coding-Agenten |
+| [`docs/claude-session-1.md`](docs/claude-session-1.md) | Sitzungsprotokoll Session 1 (Prompts 0–4c) |
+| [`docs/claude-session-2.md`](docs/claude-session-2.md) | Sitzungsprotokoll Session 2 (Prompts 5–7c) |
+| [`docs/claude-session-3.md`](docs/claude-session-3.md) | Sitzungsprotokoll Session 3 (Prompts 8–10b) |

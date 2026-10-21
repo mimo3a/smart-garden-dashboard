@@ -1,25 +1,34 @@
 # Prompts – Smart Garden Dashboard (Vibe Coding)
 
+Diese Datei enthält alle Prompts in der Reihenfolge, in der sie tatsächlich an Claude Code gegeben wurden.
+Geplante Prompts sind mit einer Nummer (1–10) gekennzeichnet, Folge-Prompts zur Korrektur mit einem
+Buchstaben (beispielsweise 2b). Zu jedem Folge-Prompt ist kurz der Anlass angegeben.
+
 Vorgehen nach der Arbeitsschleife aus der Vorlesung: Auftrag → Kontext → kleine Änderung → prüfen → iterieren.
-Jeder Prompt = ein Schritt. Nach jedem Schritt: Diff ansehen, Tests laufen lassen, App starten, Git-Commit.
-Die "Prüfen"-Punkte sind für dich, nicht für die KI. Was nicht klappt → Feedback-Prompt schreiben und im Log festhalten.
+Nach jedem Schritt wurden Diff, Testergebnis und Verhalten der App geprüft und ein Git-Commit erstellt.
+
+Die vollständigen Sitzungsprotokolle stehen in `docs/claude-session-1.md` bis `docs/claude-session-3.md`.
 
 ---
 
+## Session 1 – Grundgerüst, Parser, Simulator, UART
+
+### Prompt 0 – Kontextprüfung
+```
 Welche Dateien siehst du im Projektordner und was steht in CLAUDE.md zusammengefasst?
-
-## Prompt 1 – Projekt-Setup
 ```
-Hinweis: Wir sind unter Windows, nutze PowerShell-Befehle.
-Lies AGENTS.md. Lege das Projektgerüst genau nach der dort beschriebenen Struktur an:
-requirements.txt, leere Module mit Docstrings, config.json mit Kalibrierwerten für 4 Kanäle
-(dry_raw=26000, wet_raw=12000) und Schwellwerten (Bodenfeuchte min 30 %, Lufttemperatur 5–35 °C,
-Bodentemperatur 5–30 °C, Batterie min 20 %), eine .gitignore für Python und SQLite-Dateien.
-Nenne zuerst kurz deinen Plan. Noch keine Logik implementieren.
-```
-**Prüfen:** Struktur = AGENTS.md? `pip install -r requirements.txt` klappt?
 
-## Prompt 2 – Parser + Datenmodell
+### Prompt 1 – Projekt-Setup
+Ergänzt um den Windows-Hinweis, nachdem der Agent in Prompt 0 bash-Befehle unter Windows verwendet hatte.
+```
+Hinweis: Wir sind unter Windows, nutze PowerShell-Befehle. Lies AGENTS.md. Lege das Projektgerüst genau
+nach der dort beschriebenen Struktur an: requirements.txt, leere Module mit Docstrings, config.json mit
+Kalibrierwerten für 4 Kanäle (dry_raw=26000, wet_raw=12000) und Schwellwerten (Bodenfeuchte min 30 %,
+Lufttemperatur 5–35 °C, Bodentemperatur 5–30 °C, Batterie min 20 %), eine .gitignore für Python und
+SQLite-Dateien. Nenne zuerst kurz deinen Plan. Noch keine Logik implementieren.
+```
+
+### Prompt 2 – Parser + Datenmodell
 ```
 Implementiere app/models.py und app/parser.py gemäß dem Datenformat in AGENTS.md.
 parse_line(line: str) -> Reading | None: gibt None bei ungültigem JSON zurück, toleriert fehlende Felder
@@ -28,10 +37,10 @@ der Kalibrierung in config.json und begrenze auf 0–100.
 Schreibe pytest-Tests: gültige Zeile, kaputtes JSON, fehlende Batterie, Kanal mit err, Rohwert außerhalb
 der Kalibrierung. Führe die Tests aus.
 ```
-**Prüfen:** Stimmt die Prozent-Umrechnung (trocken = hoher Rohwert!)? Tests decken Randfälle wirklich ab?
 
-## Prompt 2b – Folge-Prompt (Robustheit Parser)
-
+### Prompt 2b – Folge-Prompt: Robustheit Parser
+Anlass: `parse_line('[1,2]')` führte zu einem `AttributeError`, obwohl alle 17 Tests grün waren.
+```
 Review von parser.py: parse_line verletzt die Regel "niemals abstürzen" aus AGENTS.md.
 1. Gültiges JSON, das kein Objekt ist ([1,2], 123, null), führt zu AttributeError.
 2. "adc": null oder ein Kanal-Eintrag, der kein Objekt ist, führt zu einem Absturz.
@@ -39,9 +48,9 @@ Review von parser.py: parse_line verletzt die Regel "niemals abstürzen" aus AGE
 4. Ein Kanal ohne "ch" wird stillschweigend zu Kanal 0 – solche Einträge stattdessen verwerfen und loggen.
 Behebe das so, dass parse_line in diesen Fällen None zurückgibt bzw. nur das fehlerhafte Feld/den Kanal
 verwirft. Ergänze für jeden Fall einen Test und führe alle Tests aus.
+```
 
-
-## Prompt 3 – Simulator
+### Prompt 3 – Simulator
 ```
 Implementiere app/simulator.py: ein Generator, der jede Sekunde eine JSON-Zeile im Format aus AGENTS.md
 erzeugt. Werte sollen sich realistisch langsam ändern (Random Walk): Bodenfeuchte sinkt langsam und
@@ -50,24 +59,27 @@ folgt der Lufttemperatur träge, Batterie entlädt sich langsam. Selten (ca. 2 %
 oder ein Kanal mit status "err" kommen, damit die Fehlerbehandlung getestet wird.
 Der Simulator liefert Strings, damit er denselben Weg durch den Parser nimmt wie echte UART-Daten.
 ```
-**Prüfen:** Kommen die Daten wirklich durch `parse_line`? Sind die Werte plausibel?
 
-## Prompt 3b – Folge-Prompt (Neu Format)
-
+### Prompt 3b – Folge-Prompt: Legacy-Format
+Anlass: Annahme, dass die Firmware noch ein reines JSON-Array sendet (stellte sich später als falsch heraus).
+```
 Die aktuelle Firmware sendet noch das alte Format: ein JSON-Array [{"ch":0,"raw":15234,"status":"ok"}, ...]
 ohne Temperaturen und Batterie. parse_line soll dieses Legacy-Format zusätzlich akzeptieren
 (Temperaturen und Batterie dann None). Ergänze Tests dafür und aktualisiere das Datenformat in AGENTS.md
 und CLAUDE.md.
+```
 
-## Folge-Prompt 3c
-
+### Prompt 3c – Folge-Prompt: leere Readings
+Anlass: Der Agent hatte einen bestehenden Test stillschweigend so geändert, dass `[1, 2, 3]` ein leeres Reading lieferte.
+```
 Du hast test_json_array so angepasst, dass "[1, 2, 3]" jetzt ein leeres Reading liefert – das schwächt
 den Robustheits-Fix ab. Regel: parse_line gibt None zurück, wenn nach dem Parsen keinerlei Messwerte
 übrig sind (keine gültigen Kanäle, keine Temperaturen, keine Batterie). Das gilt für [1,2,3], [],
 {"adc": null} und {}. Stelle den ursprünglichen Test für [1,2,3] (Ergebnis None) wieder her, ergänze
 Tests für die anderen Fälle und führe danach ALLE Tests aus (pytest -q), nicht nur test_parser.py.
+```
 
-## Prompt 4 – UART-Reader
+### Prompt 4 – UART-Reader
 ```
 Implementiere app/serial_reader.py: ein Hintergrund-Thread, der mit pyserial vom angegebenen Port liest
 (Port und Baudrate aus CLI-Argumenten), Zeilen als UTF-8 dekodiert (Fehler ignorieren), parse_line
@@ -75,10 +87,10 @@ aufruft und gültige Readings an einen Callback übergibt. Bei Verbindungsabbruc
 verbinden, ohne die App zu beenden. Sauberes Stoppen beim Herunterfahren.
 Gemeinsame Schnittstelle mit dem Simulator, damit main.py beide Quellen gleich behandelt.
 ```
-**Prüfen:** Mit Platine testen (COM-Port unter Windows!). Was passiert beim Abziehen des USB-Kabels?
 
-## Folge-Prompt 4b:
-
+### Prompt 4b – Folge-Prompt: Robustheit Reader
+Anlass: Der Agent hatte Warnungen aus erschöpften Test-Mocks im Produktivcode mit `except Exception: break` „behoben".
+```
 Review von serial_reader.py:
 1. Die StopIteration-Warnings kamen von erschöpften Mock-side_effects in den Tests, nicht vom Produktivcode.
    Behebe das in den Tests (Mocks so aufsetzen, dass sie nicht erschöpft werden, oder stop() vorher auslösen).
@@ -89,9 +101,11 @@ Review von serial_reader.py:
 3. SimulatorReader soll ebenfalls von DataSource erben.
 Ergänze einen Test: Callback wirft eine Exception, nachfolgende Readings werden trotzdem zugestellt.
 Führe alle Tests aus.
+```
 
-## Folge-Prompt 4c
-
+### Prompt 4c – Folge-Prompt: echtes Firmware-Format
+Anlass: Ein Blick in den Serial Monitor zeigte, dass die Firmware ein anderes Format sendet als in AGENTS.md angenommen.
+```
 Hardwaretest: Die echte Firmware sendet ein anderes Format als in AGENTS.md beschrieben. Beispielzeile
 der aktuellen Entwicklungsplatine (Eingänge noch unbeschaltet, Werte bedeutungslos):
 {"channels":[{"dev":0,"ch":0,"status":0,"raw":4781},{"dev":0,"ch":1,"status":0,"raw":4755},{"dev":0,"ch":2,"status":0,"raw":4728},{"dev":0,"ch":3,"status":0,"raw":4772},{"dev":1,"ch":0,"status":0,"raw":25351},{"dev":1,"ch":1,"status":0,"raw":24649},{"dev":1,"ch":2,"status":0,"raw":23800},{"dev":1,"ch":3,"status":0,"raw":23156}]}
@@ -116,8 +130,15 @@ Regeln für das Format:
 5. AGENTS.md und CLAUDE.md: Datenformat-Abschnitt durch dieses Format ersetzen.
 Tests: echte Beispielzeile oben (8 Kanäle, keine Temperaturen) und eine vollständige Zeile
 (16 Kanäle + Temperaturen + Batterie). Alle Tests ausführen.
+```
 
-## Prompt 5 – Speicherung in SQLite
+---
+
+## Session 2 – Datenbank, API, Dashboard
+
+### Prompt 5 – Speicherung in SQLite
+Hinweis: Versehentlich wurde die ursprüngliche, inzwischen veraltete Fassung aus dem Prompt-Plan verwendet
+(noch mit vier Kanälen als Spalten). Die Korrektur folgt in 5b.
 ```
 Implementiere app/db.py: Tabelle readings (id, ts, source, moisture_ch0..ch3 als Prozent,
 raw_ch0..ch3, status_ch0..ch3, air_temp_c, soil_temp_c, battery_voltage, battery_percent).
@@ -125,10 +146,10 @@ Funktionen: init_db, insert_reading, latest_reading, readings_since(minutes). Nu
 Queries. Thread-sicher, weil der Reader-Thread schreibt und die API liest.
 Tests mit einer temporären Datenbank.
 ```
-**Prüfen:** Parametrisierte Queries? Thread-Sicherheit wirklich gelöst oder nur behauptet?
 
-## Folge-Prompt 5b:
-
+### Prompt 5b – Folge-Prompt: Normalisierung
+Anlass: flaches Schema mit 48 Spalten; Kanäle außerhalb von `dev*4+ch < 16` wurden stillschweigend verworfen.
+```
 Das Schema in db.py ist flach (48 Spalten moisture_ch0..15 usw.) und verwirft Kanäle außerhalb von
 dev*4+ch < 16 stillschweigend – der Parser übernimmt solche Kanäle aber. Bitte normalisieren:
 1. Tabelle readings (id, ts, source, air_temp_c, soil_temp_c, battery_voltage, battery_percent)
@@ -142,8 +163,9 @@ dev*4+ch < 16 stillschweigend – der Parser übernimmt solche Kanäle aber. Bit
 Thread-Sicherheit (WAL + Lock, Connection pro Aufruf) beibehalten. Tests anpassen, einen Test für
 einen Kanal mit dev=7 ergänzen (muss gespeichert werden) und test_boundary_included so umbenennen
 oder ändern, dass er wirklich die Grenze prüft. Alle Tests ausführen.
+```
 
-## Prompt 6 – REST-API
+### Prompt 6 – REST-API
 ```
 Implementiere app/main.py mit FastAPI:
 GET /api/latest – letzte Messung inkl. Kanälen
@@ -159,10 +181,10 @@ Datenquelle als Hintergrund-Thread starten (Callback = insert_reading mit source
 static/ unter / ausliefern, sodass http://127.0.0.1:8000 die index.html zeigt.
 Start mit: python -m app.main. API-Tests mit FastAPIs TestClient. Alle Tests ausführen.
 ```
-**Prüfen:** `python -m app.main --simulate` starten, `/docs` öffnen, Endpunkte manuell testen.
 
-## Folge-Prompt 6b:
-
+### Prompt 6b – Folge-Prompt: Host, Static-Pfade, Test
+Anlass: Server lauschte auf `0.0.0.0`, CSS/JS-Pfade lieferten 404, ein Test war immer grün.
+```
 Review von main.py und test_main.py:
 1. uvicorn läuft auf host="0.0.0.0" – das Dashboard ohne Login wäre im ganzen Netzwerk erreichbar.
    Default 127.0.0.1, neues CLI-Argument --host für bewusstes Freigeben.
@@ -172,8 +194,9 @@ Review von main.py und test_main.py:
 3. test_bucket_averages_temperature ist immer grün (akzeptiert 10, 15 oder 20). Mit eingefrorener
    Zeit (_utcnow per monkeypatch) zwei Readings sicher in denselben Bucket legen und exakt 15.0 prüfen.
 Alle Tests ausführen.
+```
 
-## Prompt 7 – Dashboard
+### Prompt 7 – Dashboard
 ```
 Baue das Dashboard in static/index.html, app.js und style.css (Vanilla JS, Chart.js über CDN):
 1. Kopfzeile mit Lufttemperatur, Bodentemperatur und Batterie (Prozent + Balken, Spannung),
@@ -190,10 +213,10 @@ Baue das Dashboard in static/index.html, app.js und style.css (Vanilla JS, Chart
 Starte die App danach nicht selbst dauerhaft; führe die Tests aus (inkl. des Tests für referenzierte
 Dateien) und nenne mir, was ich im Browser prüfen soll.
 ```
-**Prüfen:** Im Browser ansehen, Handy-Breite testen, kaputte Werte aus dem Simulator beobachten.
 
-## Folge-Prompt 7b:
-
+### Prompt 7b – Folge-Prompt: Ergebnisse des Browser-Tests
+Anlass: Kategorie-Achse, automatische y-Skala, fehlender Feuchte-Balken, veraltete CSS-Datei aus dem Browser-Cache.
+```
 Browser-Test des Dashboards:
 1. Die Diagramme nutzen eine Kategorie-Achse: Messpunkte mit 9 min, 0 min und über 1 h Abstand stehen
    gleich weit auseinander, und Lücken (App lief nicht) werden durch Linien überbrückt. Nutze eine
@@ -206,9 +229,11 @@ Browser-Test des Dashboards:
    Cache-Control: no-cache ausliefern (Revalidierung statt veralteter Kopie) und einen Test dafür.
 5. Diagrammhöhe über einen Wrapper-Container mit fester Höhe statt canvas { height … !important }.
 Alle Tests ausführen und mir sagen, was ich im Browser erneut prüfen soll.
+```
 
-## Folge-Prompt 7c:
-
+### Prompt 7c – Folge-Prompt: Lückenerkennung
+Anlass: Die Lückenschwelle wurde aus der Anzahl der Datenpunkte statt aus der echten Bucket-Breite berechnet.
+```
 Fehler in updateCharts (app.js): bucketMs = Zeitfenster / rows.length verwendet die Anzahl der Buckets
 MIT Daten, nicht die tatsächliche Bucket-Breite. Bei wenigen Punkten (App lief nur kurz) wird die
 Lückenschwelle riesig (z. B. 12 h bei 4 Punkten in 24 h) und Lücken werden wieder überbrückt.
@@ -217,8 +242,13 @@ Lückenschwelle riesig (z. B. 12 h bei 4 Punkten in 24 h) und Lücken werden wie
 2. x-Achse auf das gewählte Zeitfenster festlegen (min = jetzt − Zeitfenster, max = jetzt), damit
    "24 h" wirklich 24 Stunden zeigt.
 Führe die Tests aus und nenne mir, wie ich die Lücke im Browser sichtbar machen kann.
+```
 
-## Prompt 8 – Schwellwerte und Alarme
+---
+
+## Session 3 – Alarme, Review, Dokumentation
+
+### Prompt 8 – Schwellwerte, Alarme und Demo-Modus
 ```
 Implementiere Schwellwerte und Alarme:
 1. app/alerts.py: check_alerts(reading, config) -> Liste von Alarmen {type, severity, message, dev, ch}.
@@ -236,10 +266,10 @@ Tests für jede Regel inkl. genau auf der Schwelle, fehlende Werte, /api/latest 
 der Demo-Modus jeden Alarmtyp mindestens einmal erzeugt. Alle Tests ausführen und mir sagen, was
 ich im Browser prüfen soll.
 ```
-**Prüfen:** Grenzfälle (genau 30 %, genau 20 % Batterie) – wie entscheidet der Code? So gewollt?
 
-## Folge-Prompt 8b:
-
+### Prompt 8b – Folge-Prompt: Demo-Abdeckung und Alarmleiste
+Anlass: `soil_temp_high` kam im Demo nie vor (Test-Erwartung passend gekürzt), 16 einzelne Badges bei „trocken", ungefragte Memory-Einträge.
+```
 Review von Prompt 8:
 1. Es gibt 7 Alarmtypen, der Demo-Modus erzeugt aber nur 6 – soil_temp_high kommt nie vor. Der
    Demo-Test ist nur grün, weil soil_temp_high in der erwarteten Menge fehlt. Ergänze ein Szenario,
@@ -251,15 +281,18 @@ Review von Prompt 8:
 3. Du hast ohne Auftrag in deine Memory/Kontextdateien geschrieben. Zeig mir, was du geändert hast,
    und ändere solche Dateien künftig nur nach Rückfrage.
 Alle Tests ausführen.
+```
 
-## Prompt 9 – Review durch die KI
+### Prompt 9 – Review durch die KI
 ```
 Führe ein Review des gesamten Projekts durch: Bugs, Sicherheitsprobleme, Race Conditions,
 Verstöße gegen AGENTS.md, Wartbarkeit/Duplikate, fehlende Tests. Liste die Funde nach Schwere
 (hoch/mittel/niedrig) mit Datei und Zeile auf. Ändere noch nichts.
+```
 
-## Folge-Prompt 9b
-
+### Prompt 9b – Folge-Prompt: Konfiguration und Datenkorrektheit
+Anlass: Funde H1, M1, M5 und N3 aus dem KI-Review sowie ein zusätzlicher eigener Fund (doppelte Kanäle).
+```
 Behebe aus dem Review:
 1. H1 + M1 + N3: Neues Modul app/config.py als einzige Stelle zum Laden von config.json
    (Sensoren mit Kalibrierung, Schwellwerte). Cache mit Neuladen bei geänderter Datei (mtime).
@@ -271,9 +304,11 @@ Behebe aus dem Review:
    Eintrag behalten und loggen. Test dafür.
 3. M5: _row_to_reading mit .get() robust machen und testen (korrupte Kanäle, ungültiger ts).
 Alle Tests ausführen.
+```
 
-## Folge-Prompt 9c 
-
+### Prompt 9c – Folge-Prompt: Refactoring und Tests
+Anlass: Funde M2, M7, M8, N1 und N4 aus dem KI-Review sowie ein zusätzlicher eigener Fund (schwacher Test).
+```
 Behebe aus dem Review:
 1. M2: Gemeinsame Basisklasse für SimulatorReader und DemoSimulatorReader (nur der Generator
    unterscheidet sich).
@@ -283,8 +318,9 @@ Behebe aus dem Review:
 4. Zusätzlicher Fund: test_unknown_sensor_has_fallback_name prüft mit "or" und ist damit zu
    schwach. Exakte erwartete Meldung prüfen.
 Alle Tests ausführen.
+```
 
-## Prompt 10 – README
+### Prompt 10 – README
 ```
 Schreibe README.md auf Deutsch:
 1. Kurzbeschreibung (Smart-Garden-Dashboard, Bezug zur STM32-Platine, Vibe-Coding-Hausübung) und
@@ -303,8 +339,10 @@ Schreibe README.md auf Deutsch:
 Teste die Anleitung anschließend selbst: klone das Repository in einen temporären Ordner, führe
 die Schritte dort aus (inkl. pytest) und berichte, ob alles funktioniert hat. Lösche den Ordner danach.
 ```
-## Folge-Prompt 10b:
 
+### Prompt 10b – Folge-Prompt: README-Korrekturen
+Anlass: falsche Aussage zur Entstehung des Repositorys sowie kleinere Ungenauigkeiten.
+```
 Korrekturen an README.md:
 1. Die Aussage "alle Inhalte wurden ausschließlich durch Prompts an Claude Code erzeugt" stimmt
    nicht. Ersetze sie durch: Der Anwendungscode und die Tests wurden per Vibe Coding mit Claude Code
@@ -317,11 +355,14 @@ Korrekturen an README.md:
 5. Screenshot-Verweis auf docs/screenshot.png lassen, den Platzhaltertext entfernen (ich lege die
    Datei selbst an).
 Keine weiteren Änderungen.
+```
 
+---
 
+## Übersicht
 
-
-## Optionale Erweiterungen (wenn Zeit bleibt)
-- CSV-Export der Historie (`GET /api/export.csv`)
-- Schwellwerte im Dashboard ändern und in config.json speichern
-- Docker-Container (Bezug zur Vorlesung 04-Docker)
+| Kategorie | Anzahl |
+|---|---|
+| Geplante Prompts (0–10) | 11 |
+| Folge-Prompts zur Korrektur | 13 (2b, 3b, 3c, 4b, 4c, 5b, 6b, 7b, 7c, 8b, 9b, 9c, 10b) |
+| Sitzungen | 3 |
