@@ -13,6 +13,7 @@ import re
 import app.db as db_module
 import app.main as main_module
 from app.db import init_db, insert_reading
+from app.main import _row_to_reading
 from app.models import AdcChannel, BatteryReading, Reading
 from app.serial_reader import DataSource
 
@@ -398,3 +399,81 @@ class TestStaticFiles:
             assert resp.status_code == 200, (
                 f"index.html references '{ref}' but it returned HTTP {resp.status_code}"
             )
+
+
+# ---------------------------------------------------------------------------
+# _row_to_reading
+# ---------------------------------------------------------------------------
+
+class TestRowToReading:
+    def test_valid_row_returns_reading(self):
+        row = {
+            "ts": "2025-01-01T12:00:00+00:00",
+            "channels": [{"dev": 0, "ch": 0, "raw": 15000, "status": "ok", "moisture_pct": 55.0}],
+            "air_temp_c": 22.0,
+            "soil_temp_c": 18.0,
+            "battery_percent": 75.0,
+            "battery_voltage": 3.9,
+        }
+        r = _row_to_reading(row)
+        assert r.air_temp_c == pytest.approx(22.0)
+        assert len(r.channels) == 1
+
+    def test_missing_dev_channel_skipped(self):
+        row = {
+            "ts": "2025-01-01T12:00:00+00:00",
+            "channels": [
+                {"ch": 0, "raw": 15000, "status": "ok", "moisture_pct": 55.0},   # no dev
+                {"dev": 0, "ch": 1, "raw": 16000, "status": "ok", "moisture_pct": 40.0},
+            ],
+        }
+        r = _row_to_reading(row)
+        assert len(r.channels) == 1
+        assert r.channels[0].ch == 1
+
+    def test_missing_ch_channel_skipped(self):
+        row = {
+            "ts": "2025-01-01T12:00:00+00:00",
+            "channels": [
+                {"dev": 0, "raw": 15000, "status": "ok", "moisture_pct": 55.0},  # no ch
+                {"dev": 0, "ch": 1, "raw": 16000, "status": "ok", "moisture_pct": 40.0},
+            ],
+        }
+        r = _row_to_reading(row)
+        assert len(r.channels) == 1
+
+    def test_invalid_channel_skipped(self, caplog):
+        import logging
+        row = {
+            "ts": "2025-01-01T12:00:00+00:00",
+            "channels": [
+                {"dev": "not_a_number", "ch": 0, "raw": 15000, "status": "ok", "moisture_pct": None},
+                {"dev": 0, "ch": 1, "raw": 16000, "status": "ok", "moisture_pct": 40.0},
+            ],
+        }
+        with caplog.at_level(logging.WARNING, logger="app.main"):
+            r = _row_to_reading(row)
+        assert any(c.ch == 1 for c in r.channels)
+        assert "Skipping" in caplog.text
+
+    def test_invalid_timestamp_falls_back_to_now(self):
+        row = {"ts": "not-a-date", "channels": []}
+        r = _row_to_reading(row)
+        diff = abs((datetime.now(tz=timezone.utc) - r.timestamp).total_seconds())
+        assert diff < 5
+
+    def test_missing_battery_fields_gives_none(self):
+        row = {"ts": "2025-01-01T12:00:00+00:00", "channels": [],
+               "battery_percent": None, "battery_voltage": None}
+        assert _row_to_reading(row).battery is None
+
+    def test_battery_present(self):
+        row = {"ts": "2025-01-01T12:00:00+00:00", "channels": [],
+               "battery_percent": 80.0, "battery_voltage": 3.96}
+        r = _row_to_reading(row)
+        assert r.battery is not None
+        assert r.battery.percent == pytest.approx(80.0)
+
+    def test_empty_channels_list(self):
+        row = {"ts": "2025-01-01T12:00:00+00:00", "channels": []}
+        assert _row_to_reading(row).channels == []

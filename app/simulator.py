@@ -8,16 +8,15 @@ import math
 import random
 import threading
 import time
-from pathlib import Path
 from typing import Callable, Iterator, Optional
 
+from app.config import get_calibration
 from app.models import Reading
 from app.parser import parse_line
 from app.serial_reader import DataSource
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 _NUM_DEVS = 4
 _NUM_CH = 4
 _NUM_SENSORS = _NUM_DEVS * _NUM_CH  # 16 total
@@ -36,22 +35,6 @@ _DEMO_SCENARIOS: list[tuple[float, float, float, float, set[tuple[int, int]]]] =
     (65.0, 32.0, 32.0, 75.0, set()),       # 6: heißer Boden  → soil_temp_high
     #   air_temp 32 °C < 35 °C-Grenze → kein air_temp_high
 ]
-
-
-def _load_calibration_by_sensor() -> dict[tuple[int, int], dict]:
-    """Load per-sensor calibration from config.json, keyed by (dev, ch)."""
-    defaults = {
-        (dev, ch): {"dry_raw": 26000, "wet_raw": 12000}
-        for dev in range(_NUM_DEVS)
-        for ch in range(_NUM_CH)
-    }
-    try:
-        with _CONFIG_PATH.open(encoding="utf-8") as fh:
-            cfg = json.load(fh)
-        cal = {(e["dev"], e["ch"]): e for e in cfg.get("sensors", [])}
-        return cal if cal else defaults
-    except Exception:
-        return defaults
 
 
 def _moisture_to_raw(pct: float, dry_raw: int, wet_raw: int) -> int:
@@ -96,7 +79,7 @@ def simulate(interval: float = 1.0, seed: Optional[int] = None) -> Iterator[str]
         seed:     Optional seed for the internal RNG (for reproducible tests).
     """
     rng = random.Random(seed)
-    calibration = _load_calibration_by_sensor()
+    calibration = get_calibration()
 
     # Independent moisture state for each of the 16 sensors: moisture[dev*4+ch]
     moisture: list[float] = [
@@ -179,7 +162,7 @@ def simulate_demo(interval: float = 1.0, seed: Optional[int] = None) -> Iterator
         seed:     Optional RNG seed for reproducible noise.
     """
     rng = random.Random(seed)
-    calibration = _load_calibration_by_sensor()
+    calibration = get_calibration()
 
     scenario_idx = 0
     step_in_scenario = 0

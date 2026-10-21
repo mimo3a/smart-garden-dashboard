@@ -337,3 +337,47 @@ class TestEmptyReading:
         r = parse_line(json.dumps({"air_temp_c": 22.0}))
         assert r is not None
         assert r.air_temp_c == pytest.approx(22.0)
+
+
+# ---------------------------------------------------------------------------
+# Duplicate (dev, ch) entries
+# ---------------------------------------------------------------------------
+
+class TestDuplicateChannels:
+    def test_duplicate_dev_ch_keeps_last(self):
+        line = json.dumps({"channels": [
+            {"dev": 0, "ch": 0, "status": 0, "raw": 15000},  # first
+            {"dev": 0, "ch": 0, "status": 0, "raw": 20000},  # second – wins
+        ]})
+        r = parse_line(line)
+        assert len(r.channels) == 1
+        assert r.channels[0].raw == 20000
+
+    def test_duplicate_logs_warning(self, caplog):
+        import logging
+        line = json.dumps({"channels": [
+            {"dev": 0, "ch": 0, "status": 0, "raw": 15000},
+            {"dev": 0, "ch": 0, "status": 0, "raw": 20000},
+        ]})
+        with caplog.at_level(logging.WARNING, logger="app.parser"):
+            parse_line(line)
+        assert "Duplicate" in caplog.text
+
+    def test_three_duplicates_keeps_last(self):
+        line = json.dumps({"channels": [
+            {"dev": 1, "ch": 2, "status": 0, "raw": 10000},
+            {"dev": 1, "ch": 2, "status": 0, "raw": 15000},
+            {"dev": 1, "ch": 2, "status": 0, "raw": 20000},  # wins
+        ]})
+        r = parse_line(line)
+        assert len(r.channels) == 1
+        assert r.channels[0].raw == 20000
+
+    def test_non_duplicate_channels_unaffected(self):
+        line = json.dumps({"channels": [
+            {"dev": 0, "ch": 0, "status": 0, "raw": 15000},
+            {"dev": 0, "ch": 1, "status": 0, "raw": 16000},
+            {"dev": 1, "ch": 0, "status": 0, "raw": 17000},
+        ]})
+        r = parse_line(line)
+        assert len(r.channels) == 3

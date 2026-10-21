@@ -30,7 +30,9 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 | 7b | Folge-Prompt Browser-Test | Zeitachse, 0–100 %, Balken, no-cache, Wrapper | Lückenschwelle falsch berechnet → 7c | … |
 | 7c | Folge-Prompt Lücken | Bucket-Breite wie Backend, x-Achse fixiert, 156/156 | – | … |
 | 8 | Alarme | | | |
-| 9 | KI-Review | | | |
+| 9 | KI-Review | 17 Funde (1 hoch, 8 mittel, 8 niedrig) | Vergleich mit eigenem Review, mögliche Halluzination (Regel) | … |
+| 9b | Fix Config/Duplikate | app/config.py mit mtime-Cache, Dedup, 234/234 | Sprache EN, bash-Fehler erneut | … |
+## 10. Fazit
 | 10 | README | | | |
 
 ## 5. Was gut funktioniert hat
@@ -39,6 +41,8 @@ Alle Prompts stehen in `PROMPTS.md`; Abweichungen und Folge-Prompts im Log unten
 
 ## 6. Was nicht gut funktioniert hat
 - Шум в окружении. Агент сначала запустил PowerShell-команды (Get-ChildItem) в bash, получил command not found и только потом переключился на PowerShell. Он не учёл, что работает под Windows, и тратил на это лишние шаги и токены. Это пункт для раздела 6.
+
+Regeln in CLAUDE.md (PowerShell, Deutsch) waren vorhanden und wurden trotzdem wiederholt ignoriert: Antworten auf Englisch, erster Befehl jeweils in bash. Die Kontextdatei ist ein Hinweis, keine Garantie; Einhaltung muss man selbst prüfen.
 - _…_
 
 ## 7. Gefundene Probleme der KI
@@ -63,10 +67,5 @@ Unbekanntes Paket vom Agenten installiert → gegen offizielle Doku geprüft →
 _Lief der UART-Reader mit der Nucleo-Platine? COM-Port-Probleme unter Windows? Verhalten beim Abziehen._
 
 ## 9. Reflexion
-- Verstehe ich den erzeugten Code? Welche Teile musste ich mir genauer ansehen?
-- Wäre ich selbst schneller gewesen? Wo ja, wo nein?
-- Technical Debt: Was würde ich vor einem echten Einsatz umbauen?
-- Wofür würde ich Vibe Coding wieder verwenden – und wofür nicht?
 
-## 10. Fazit
 _3–5 Sätze._

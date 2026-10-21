@@ -12,7 +12,6 @@ CLI usage::
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -24,6 +23,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 
 from app.alerts import check_alerts
+from app.config import get_config
 from app.db import history_buckets, init_db, insert_reading, latest_reading, purge_older_than
 from app.models import AdcChannel, BatteryReading, Reading
 from app.serial_reader import DataSource, SerialReader
@@ -31,7 +31,6 @@ from app.simulator import DemoSimulatorReader, SimulatorReader
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 _STATIC_DIR = Path(__file__).parent.parent / "static"
 
 # Set once before uvicorn starts (see __main__ block).
@@ -60,16 +59,24 @@ def _parse_args() -> argparse.Namespace:
 
 def _row_to_reading(row: dict) -> Reading:
     """Reconstruct a Reading from a latest_reading() dict for alert computation."""
-    channels = [
-        AdcChannel(
-            dev=c["dev"],
-            ch=c["ch"],
-            raw=c.get("raw"),
-            status=c.get("status", "ok"),
-            moisture_pct=c.get("moisture_pct"),
-        )
-        for c in row.get("channels", [])
-    ]
+    channels: list[AdcChannel] = []
+    for c in row.get("channels", []):
+        dev = c.get("dev")
+        ch_idx = c.get("ch")
+        if dev is None or ch_idx is None:
+            logger.warning("Skipping channel with missing dev/ch: %r", c)
+            continue
+        try:
+            channels.append(AdcChannel(
+                dev=dev,
+                ch=ch_idx,
+                raw=c.get("raw"),
+                status=c.get("status", "ok"),
+                moisture_pct=c.get("moisture_pct"),
+            ))
+        except Exception as exc:
+            logger.warning("Skipping invalid channel %r: %s", c, exc)
+
     battery: Optional[BatteryReading] = None
     batt_pct = row.get("battery_percent")
     batt_v = row.get("battery_voltage")
@@ -80,6 +87,7 @@ def _row_to_reading(row: dict) -> Reading:
     try:
         ts = datetime.fromisoformat(ts_str)
     except (ValueError, TypeError):
+        logger.warning("Invalid timestamp %r in DB row, using now", ts_str)
         ts = datetime.now(tz=timezone.utc)
 
     return Reading(
@@ -156,9 +164,8 @@ def api_latest() -> dict:
 
     alerts: list[dict] = []
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
         reading = _row_to_reading(row)
-        alerts = check_alerts(reading, cfg)
+        alerts = check_alerts(reading, get_config())
     except Exception as exc:
         logger.warning("check_alerts failed: %s", exc)
 
@@ -184,10 +191,10 @@ def api_history(
 @app.get("/api/config")
 def api_config() -> dict:
     """Return the sensor calibration and alert thresholds from config.json."""
-    try:
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Cannot read config: {exc}")
+    cfg = get_config()
+    if not cfg:
+        raise HTTPException(status_code=500, detail="Cannot read config")
+    return cfg
 
 
 # Static files are mounted last so API routes always take priority.

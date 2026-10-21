@@ -5,33 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional
 
+from app.config import get_calibration
 from app.models import AdcChannel, BatteryReading, Reading
 
 logger = logging.getLogger(__name__)
-
-_CONFIG_PATH = Path(__file__).parent.parent / "config.json"
-_calibration_cache: Optional[dict[tuple[int, int], dict]] = None
-
-
-def _load_calibration() -> dict[tuple[int, int], dict]:
-    """Return sensor calibration keyed by (dev, ch), loaded once from config.json."""
-    global _calibration_cache
-    if _calibration_cache is not None:
-        return _calibration_cache
-    try:
-        with _CONFIG_PATH.open(encoding="utf-8") as fh:
-            cfg = json.load(fh)
-        _calibration_cache = {
-            (entry["dev"], entry["ch"]): entry
-            for entry in cfg.get("sensors", [])
-        }
-    except Exception as exc:
-        logger.warning("Could not load calibration from %s: %s", _CONFIG_PATH, exc)
-        _calibration_cache = {}
-    return _calibration_cache
 
 
 def _moisture_pct(raw: int, dry_raw: int, wet_raw: int) -> float:
@@ -82,6 +61,7 @@ def parse_line(line: str) -> Optional[Reading]:
     - Fewer than 16 channels are allowed (partial hardware build).
     - Non-JSON lines (e.g. boot messages) are discarded and return None.
     - Lines with no usable data (no channels, no temps, no battery) return None.
+    - Duplicate (dev, ch) entries: last entry wins; a warning is logged.
     """
     try:
         data = json.loads(line)
@@ -95,8 +75,8 @@ def parse_line(line: str) -> Optional[Reading]:
         )
         return None
 
-    calibration = _load_calibration()
-    channels: list[AdcChannel] = []
+    calibration = get_calibration()
+    channels_by_key: dict[tuple[int, int], AdcChannel] = {}
     raw_channels = data.get("channels")
 
     if raw_channels is not None:
@@ -121,31 +101,37 @@ def parse_line(line: str) -> Optional[Reading]:
                     )
                     continue
 
+                key = (dev_idx, ch_idx)
+                if key in channels_by_key:
+                    logger.warning(
+                        "Duplicate channel (dev=%d, ch=%d) in line – keeping last entry",
+                        dev_idx, ch_idx,
+                    )
+
                 raw = _safe_int(ch_data.get("raw"))
                 # status is an integer on the wire: 0 = ok, anything else = err
                 status_int = _safe_int(ch_data.get("status"))
                 status = "ok" if status_int == 0 else "err"
 
                 moisture: Optional[float] = None
-                cal_key = (dev_idx, ch_idx)
-                if status == "ok" and raw is not None and cal_key in calibration:
-                    cal = calibration[cal_key]
+                if status == "ok" and raw is not None and key in calibration:
+                    cal = calibration[key]
                     moisture = _moisture_pct(raw, cal["dry_raw"], cal["wet_raw"])
 
                 try:
-                    channels.append(
-                        AdcChannel(
-                            dev=dev_idx,
-                            ch=ch_idx,
-                            raw=raw,
-                            status=status,
-                            moisture_pct=moisture,
-                        )
+                    channels_by_key[key] = AdcChannel(
+                        dev=dev_idx,
+                        ch=ch_idx,
+                        raw=raw,
+                        status=status,
+                        moisture_pct=moisture,
                     )
                 except Exception as exc:
                     logger.warning(
                         "Skipping invalid channel %r: %s", ch_data, exc
                     )
+
+    channels = list(channels_by_key.values())
 
     battery: Optional[BatteryReading] = None
     batt_data = data.get("battery")

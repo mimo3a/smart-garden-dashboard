@@ -255,9 +255,22 @@ Alle Tests ausführen.
 ## Prompt 9 – Review durch die KI
 ```
 Führe ein Review des gesamten Projekts durch: Bugs, Sicherheitsprobleme, Race Conditions,
-Verstöße gegen AGENTS.md, fehlende Tests. Liste die Funde nach Schwere auf, ändere noch nichts.
-```
-Danach gezielt einzelne Funde beheben lassen. **Prüfen:** Sind die Funde echt oder halluziniert?
+Verstöße gegen AGENTS.md, Wartbarkeit/Duplikate, fehlende Tests. Liste die Funde nach Schwere
+(hoch/mittel/niedrig) mit Datei und Zeile auf. Ändere noch nichts.
+
+## Folge-Prompt 9b
+
+Behebe aus dem Review:
+1. H1 + M1 + N3: Neues Modul app/config.py als einzige Stelle zum Laden von config.json
+   (Sensoren mit Kalibrierung, Schwellwerte). Cache mit Neuladen bei geänderter Datei (mtime).
+   Bei Ladefehler loggen, letzten gültigen Stand behalten bzw. beim nächsten Aufruf erneut
+   versuchen – kein dauerhaft leerer Cache. parser.py, simulator.py und main.py nutzen nur noch
+   dieses Modul.
+2. Zusätzlicher Fund: Ein (dev, ch) doppelt in einer Zeile verletzt den PRIMARY KEY in
+   channel_values, und das ganze Reading geht verloren. Im Parser Duplikate erkennen, den letzten
+   Eintrag behalten und loggen. Test dafür.
+3. M5: _row_to_reading mit .get() robust machen und testen (korrupte Kanäle, ungültiger ts).
+Alle Tests ausführen.
 
 ## Prompt 10 – README
 ```
