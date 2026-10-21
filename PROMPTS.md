@@ -286,11 +286,40 @@ Alle Tests ausführen.
 
 ## Prompt 10 – README
 ```
-Schreibe README.md: Projektbeschreibung, Screenshot-Platzhalter, Installation, Start mit Simulator und
-mit Platine (Windows und Linux), Datenformat, API-Endpunkte, Tests, bekannte Grenzen.
+Schreibe README.md auf Deutsch:
+1. Kurzbeschreibung (Smart-Garden-Dashboard, Bezug zur STM32-Platine, Vibe-Coding-Hausübung) und
+   Screenshot-Platzhalter.
+2. Voraussetzungen (Python-Version, Internet für Chart.js-CDN).
+3. Installation und Start für jemanden, der das Repo frisch klont (Windows PowerShell und Linux):
+   venv anlegen, pip install -r requirements.txt, python -m app.main, Browser auf
+   http://127.0.0.1:8000. Varianten: --demo, --port COMx, --host, --db, --keep-days.
+4. Datenformat der Firmware (channels mit dev/ch/status/raw, optionale Temperaturen und Batterie).
+5. API-Endpunkte mit Beispielantwort, Alarmregeln, Konfiguration (config.json).
+6. Tests ausführen.
+7. Abschnitt "Bekannte Grenzen": nur 2–3 Beschriftungen auf der Zeitachse; Simulator startet nach
+   Neustart mit zufälligem Zustand; Frontend ohne automatisierte Tests; Chart.js braucht Internet;
+   teilweise doppelte Test-Helfer und Reader-Tests; Alarme werden bei jedem /api/latest neu berechnet.
+8. Verweis auf VIBE_CODING.md, PROMPTS.md und docs/ (Sitzungsprotokolle).
+Teste die Anleitung anschließend selbst: klone das Repository in einen temporären Ordner, führe
+die Schritte dort aus (inkl. pytest) und berichte, ob alles funktioniert hat. Lösche den Ordner danach.
 ```
+## Folge-Prompt 10b:
 
----
+Korrekturen an README.md:
+1. Die Aussage "alle Inhalte wurden ausschließlich durch Prompts an Claude Code erzeugt" stimmt
+   nicht. Ersetze sie durch: Der Anwendungscode und die Tests wurden per Vibe Coding mit Claude Code
+   erzeugt. Kontextdatei (AGENTS.md/CLAUDE.md), Prompt-Plan (PROMPTS.md), Berichtsvorlage und das
+   Skript tools/jsonl_to_md.py wurden vorab mit Hilfe eines KI-Chats vorbereitet; einzelne Zeilen
+   (z. B. in .gitignore und CLAUDE.md) wurden manuell ergänzt.
+2. Tests nutzen temporäre SQLite-Dateien, keine In-Memory-DB – korrigieren.
+3. Voraussetzungen: "Getestet mit Python 3.14; ab 3.11 vorgesehen, aber nicht geprüft."
+4. Repo-URL: https://github.com/mimo3a/smart-garden-dashboard.git
+5. Screenshot-Verweis auf docs/screenshot.png lassen, den Platzhaltertext entfernen (ich lege die
+   Datei selbst an).
+Keine weiteren Änderungen.
+
+
+
 
 ## Optionale Erweiterungen (wenn Zeit bleibt)
 - CSV-Export der Historie (`GET /api/export.csv`)
