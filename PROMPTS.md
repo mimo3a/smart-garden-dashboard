@@ -220,12 +220,37 @@ Führe die Tests aus und nenne mir, wie ich die Lücke im Browser sichtbar mache
 
 ## Prompt 8 – Schwellwerte und Alarme
 ```
-Implementiere app/alerts.py: check_alerts(reading, config) -> Liste von Alarmen
-(z. B. "Boden trocken Kanal 2", "Batterie niedrig", "Lufttemperatur zu hoch"). Grenzen aus config.json.
-Fehlende Werte erzeugen keinen falschen Alarm. Im Dashboard oben eine Alarmleiste anzeigen.
-Tests für jede Regel inkl. Grenzwerte (genau auf der Schwelle).
+Implementiere Schwellwerte und Alarme:
+1. app/alerts.py: check_alerts(reading, config) -> Liste von Alarmen {type, severity, message, dev, ch}.
+   Regeln aus config.json: Bodenfeuchte pro Sensor unter soil_moisture_min_percent, Luft- und
+   Bodentemperatur außerhalb min/max, Batterie unter battery_min_percent, Kanal mit status "err".
+   Grenzwert selbst löst keinen Alarm aus (strikt kleiner bzw. größer). Fehlende Werte erzeugen
+   keinen Alarm. message auf Deutsch, mit Sensorname aus config.json.
+2. /api/latest liefert zusätzlich "alerts".
+3. Dashboard: Alarmleiste oben (leer = ausgeblendet), betroffene Sensorkarten markieren. Die
+   bisherige Schwellwert-Logik im Browser entfernen – die Alarme kommen nur noch vom Server.
+4. Demo-Modus: CLI-Flag --demo (impliziert Simulator). Der Simulator spielt dann zyklisch Szenarien
+   durch (Beet trocknet aus, Hitze, Frost, Batterie niedrig, Sensorfehler), sodass jeder Alarmtyp
+   innerhalb von ca. 2–3 Minuten sichtbar wird und wieder verschwindet.
+Tests für jede Regel inkl. genau auf der Schwelle, fehlende Werte, /api/latest mit alerts und dass
+der Demo-Modus jeden Alarmtyp mindestens einmal erzeugt. Alle Tests ausführen und mir sagen, was
+ich im Browser prüfen soll.
 ```
 **Prüfen:** Grenzfälle (genau 30 %, genau 20 % Batterie) – wie entscheidet der Code? So gewollt?
+
+## Folge-Prompt 8b:
+
+Review von Prompt 8:
+1. Es gibt 7 Alarmtypen, der Demo-Modus erzeugt aber nur 6 – soil_temp_high kommt nie vor. Der
+   Demo-Test ist nur grün, weil soil_temp_high in der erwarteten Menge fehlt. Ergänze ein Szenario,
+   in dem soil_temp_high auftritt, und leite die erwartete Menge im Test aus einer zentralen Liste
+   aller Alarmtypen in alerts.py ab statt sie hart zu codieren.
+2. Bei "trocken" zeigt die Alarmleiste 16 einzelne Badges. Gleichartige Sensor-Alarme in der
+   Leiste zusammenfassen (z. B. "Bodenfeuchte zu niedrig: Beet 1, Beet 2, … (16)"); die Markierung
+   der einzelnen Karten bleibt.
+3. Du hast ohne Auftrag in deine Memory/Kontextdateien geschrieben. Zeig mir, was du geändert hast,
+   und ändere solche Dateien künftig nur nach Rückfrage.
+Alle Tests ausführen.
 
 ## Prompt 9 – Review durch die KI
 ```

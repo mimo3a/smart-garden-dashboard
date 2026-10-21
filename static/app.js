@@ -101,7 +101,71 @@ function selectSensor(sensor) {
   updateCharts();
 }
 
-function updateSensorCards(channels) {
+// ── Alert bar ─────────────────────────────────────────────────────────────────
+
+// Group same-type channel alerts into one badge.
+// Non-channel alerts (dev/ch null) are never grouped with each other.
+// Single-item groups are passed through unchanged.
+function groupAlerts(alerts) {
+  if (!alerts || alerts.length === 0) return [];
+
+  const byType = new Map();
+  for (const a of alerts) {
+    if (!byType.has(a.type)) byType.set(a.type, []);
+    byType.get(a.type).push(a);
+  }
+
+  const result = [];
+  for (const [type, group] of byType) {
+    const channelGroup = group.filter(a => a.dev != null && a.ch != null);
+    if (channelGroup.length <= 1) {
+      group.forEach(a => result.push(a));
+      continue;
+    }
+    // Multiple channel alerts of the same type → merge into one badge.
+    const label = channelGroup[0].message.split(':')[0].trim();
+    const severity = channelGroup[0].severity;
+    const names = channelGroup.map(a => {
+      const s = _config.sensors.find(s => s.dev === a.dev && s.ch === a.ch);
+      return s ? (s.name || `Sensor ${a.dev}:${a.ch}`) : `Sensor ${a.dev}:${a.ch}`;
+    });
+    const namePart = names.length <= 2
+      ? names.join(', ')
+      : names.slice(0, 2).join(', ') + ` … (${names.length})`;
+    result.push({ type, severity, message: `${label}: ${namePart}`, dev: null, ch: null });
+  }
+  return result;
+}
+
+function renderAlerts(alerts) {
+  const bar = $('alert-bar');
+  const grouped = groupAlerts(alerts);
+  if (grouped.length === 0) {
+    bar.className = 'alert-bar hidden';
+    return;
+  }
+  bar.className = 'alert-bar';
+  bar.textContent = '';
+  grouped.forEach(a => {
+    const item = document.createElement('span');
+    item.className = 'alert-item severity-' + (a.severity || 'warning');
+    item.textContent = a.message || a.type;
+    bar.appendChild(item);
+  });
+}
+
+// ── Sensor cards ──────────────────────────────────────────────────────────────
+function updateSensorCards(channels, alerts) {
+  // Build a lookup: "dev:ch" → list of alerts for that sensor
+  const alertMap = {};
+  (alerts || []).forEach(a => {
+    if (a.dev != null && a.ch != null) {
+      const key = sensorKey(a.dev, a.ch);
+      if (!alertMap[key]) alertMap[key] = [];
+      alertMap[key].push(a);
+    }
+  });
+
   const map = {};
   channels.forEach(c => { map[sensorKey(c.dev, c.ch)] = c; });
 
@@ -112,6 +176,8 @@ function updateSensorCards(channels) {
     if (!valEl) return;
     const c = map[key];
     const card = valEl.closest('.sensor-card');
+    const cardAlerts = alertMap[key] || [];
+    const hasMoistureWarn = cardAlerts.some(a => a.type === 'soil_moisture_low');
 
     if (!c) {
       valEl.textContent = '–';
@@ -130,10 +196,8 @@ function updateSensorCards(channels) {
       if (barEl) {
         const w = pct != null ? Math.min(100, Math.max(0, pct)).toFixed(1) + '%' : '0%';
         barEl.style.width = w;
-        const min = _config.thresholds.soil_moisture_min_percent;
-        const warn = min != null && pct != null && pct < min;
-        barEl.className = 'sensor-bar-fill ' + (warn ? 'sensor-bar-warn' : 'sensor-bar-ok');
-        card && card.classList.toggle('sensor-warn', warn);
+        barEl.className = 'sensor-bar-fill ' + (hasMoistureWarn ? 'sensor-bar-warn' : 'sensor-bar-ok');
+        card && card.classList.toggle('sensor-warn', hasMoistureWarn);
       }
     }
   });
@@ -172,7 +236,8 @@ async function pollLatest() {
     const data = await apiFetch('/api/latest');
     hideBanner();
     updateHeader(data);
-    updateSensorCards(data.channels || []);
+    updateSensorCards(data.channels || [], data.alerts || []);
+    renderAlerts(data.alerts || []);
   } catch (err) {
     if (err.status === 404) {
       showBanner('Warte auf erste Messung …', false);

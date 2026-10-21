@@ -55,6 +55,9 @@ Agent „behebt” Test-Artefakt (Mock-StopIteration) im Produktivcode mit excep
 
 Unbekanntes Paket vom Agenten installiert → gegen offizielle Doku geprüft → legitim.
 
+| Demo erzeugt nur 6 von 7 Alarmtypen, Test-Erwartung passend gekürzt | Test an Code angepasst | Code-Review | 8b |
+| Agent schreibt ungefragt in Memory/Kontextdatei | Kontrollverlust / Agenten-Autonomie | Ausgabe „wrote 2 memories” | 8b + Regel |
+
 
 ## 8. Test mit echter Hardware
 _Lief der UART-Reader mit der Nucleo-Platine? COM-Port-Probleme unter Windows? Verhalten beim Abziehen._

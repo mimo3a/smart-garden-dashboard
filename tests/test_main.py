@@ -93,6 +93,7 @@ def make_reading(
     battery_v: float = 3.9,
     battery_pct: float = 75.0,
 ) -> Reading:
+    # Values chosen to be within all default thresholds so no alerts fire normally.
     return Reading(
         timestamp=ts or _now(),
         channels=[
@@ -151,6 +152,50 @@ class TestApiLatest:
         insert_reading(make_reading(), source="uart")
         body = client.get("/api/latest").json()
         assert body["source"] == "uart"
+
+    def test_alerts_key_present(self, client):
+        insert_reading(make_reading(), source="test")
+        body = client.get("/api/latest").json()
+        assert "alerts" in body
+
+    def test_alerts_is_list(self, client):
+        insert_reading(make_reading(), source="test")
+        body = client.get("/api/latest").json()
+        assert isinstance(body["alerts"], list)
+
+    def test_alerts_empty_for_normal_reading(self, client):
+        # make_reading: moisture ~55 %, temp 22/18 °C, battery 75 % – all within thresholds
+        insert_reading(make_reading(), source="test")
+        body = client.get("/api/latest").json()
+        assert body["alerts"] == []
+
+    def test_alerts_triggered_for_low_moisture(self, client):
+        r = Reading(
+            timestamp=_now(),
+            channels=[AdcChannel(dev=0, ch=0, raw=25500, status="ok", moisture_pct=5.0)],
+        )
+        insert_reading(r, source="test")
+        body = client.get("/api/latest").json()
+        assert any(a["type"] == "soil_moisture_low" for a in body["alerts"])
+
+    def test_alerts_triggered_for_sensor_error(self, client):
+        r = Reading(
+            timestamp=_now(),
+            channels=[AdcChannel(dev=0, ch=0, raw=0, status="err", moisture_pct=None)],
+        )
+        insert_reading(r, source="test")
+        body = client.get("/api/latest").json()
+        assert any(a["type"] == "sensor_error" for a in body["alerts"])
+
+    def test_alerts_triggered_for_high_air_temp(self, client):
+        insert_reading(make_reading(air_temp=40.0), source="test")
+        body = client.get("/api/latest").json()
+        assert any(a["type"] == "air_temp_high" for a in body["alerts"])
+
+    def test_alerts_triggered_for_low_battery(self, client):
+        insert_reading(make_reading(battery_pct=5.0, battery_v=3.06), source="test")
+        body = client.get("/api/latest").json()
+        assert any(a["type"] == "battery_low" for a in body["alerts"])
 
 
 # ---------------------------------------------------------------------------

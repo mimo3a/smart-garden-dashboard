@@ -6,6 +6,7 @@ CLI usage::
     python -m app.main --port COM5                          # UART mode, localhost only
     python -m app.main --host 0.0.0.0 --port COM5          # expose on all interfaces
     python -m app.main --port COM5 --baud 115200 --db garden.db --keep-days 7
+    python -m app.main --demo                               # demo mode (cycles alarm scenarios)
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import argparse
 import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -21,10 +23,11 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 
+from app.alerts import check_alerts
 from app.db import history_buckets, init_db, insert_reading, latest_reading, purge_older_than
-from app.models import Reading
+from app.models import AdcChannel, BatteryReading, Reading
 from app.serial_reader import DataSource, SerialReader
-from app.simulator import SimulatorReader
+from app.simulator import DemoSimulatorReader, SimulatorReader
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,8 @@ def _parse_args() -> argparse.Namespace:
                    help="Baud rate (default 115200)")
     p.add_argument("--simulate", action="store_true",
                    help="Force simulator mode even if --port is given")
+    p.add_argument("--demo", action="store_true",
+                   help="Demo mode: cycles through alarm scenarios (implies --simulate)")
     p.add_argument("--db", default="garden.db",
                    help="SQLite database file path (default garden.db)")
     p.add_argument("--keep-days", type=int, default=7, dest="keep_days",
@@ -51,6 +56,39 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="127.0.0.1",
                    help="Bind host (default 127.0.0.1; use 0.0.0.0 to expose on all interfaces)")
     return p.parse_args()
+
+
+def _row_to_reading(row: dict) -> Reading:
+    """Reconstruct a Reading from a latest_reading() dict for alert computation."""
+    channels = [
+        AdcChannel(
+            dev=c["dev"],
+            ch=c["ch"],
+            raw=c.get("raw"),
+            status=c.get("status", "ok"),
+            moisture_pct=c.get("moisture_pct"),
+        )
+        for c in row.get("channels", [])
+    ]
+    battery: Optional[BatteryReading] = None
+    batt_pct = row.get("battery_percent")
+    batt_v = row.get("battery_voltage")
+    if batt_pct is not None and batt_v is not None:
+        battery = BatteryReading(voltage=batt_v, percent=batt_pct)
+
+    ts_str = row.get("ts", "")
+    try:
+        ts = datetime.fromisoformat(ts_str)
+    except (ValueError, TypeError):
+        ts = datetime.now(tz=timezone.utc)
+
+    return Reading(
+        timestamp=ts,
+        channels=channels,
+        air_temp_c=row.get("air_temp_c"),
+        soil_temp_c=row.get("soil_temp_c"),
+        battery=battery,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -66,9 +104,14 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     init_db(Path(_args.db))
     purge_older_than(_args.keep_days)
 
-    use_simulator: bool = _args.simulate or not _args.port
-    if use_simulator:
-        source: DataSource = SimulatorReader()
+    use_demo: bool = getattr(_args, "demo", False)
+    use_simulator: bool = use_demo or _args.simulate or not _args.port
+
+    if use_demo:
+        source: DataSource = DemoSimulatorReader()
+        source_label = "demo"
+    elif use_simulator:
+        source = SimulatorReader()
         source_label = "simulator"
     else:
         source = SerialReader(_args.port, _args.baud)
@@ -106,10 +149,20 @@ async def _no_cache_static(request: Request, call_next):
 
 @app.get("/api/latest")
 def api_latest() -> dict:
-    """Return the most recent sensor snapshot including all channels."""
+    """Return the most recent sensor snapshot including all channels and alerts."""
     row = latest_reading()
     if row is None:
         raise HTTPException(status_code=404, detail="No readings yet")
+
+    alerts: list[dict] = []
+    try:
+        cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        reading = _row_to_reading(row)
+        alerts = check_alerts(reading, cfg)
+    except Exception as exc:
+        logger.warning("check_alerts failed: %s", exc)
+
+    row["alerts"] = alerts
     return row
 
 
